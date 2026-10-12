@@ -31,6 +31,7 @@ from .research_guidance import GuidedResearch
 from .research_methods import MethodService
 from .research_notebook import NotebookService
 from .research_progress import ProgressService
+from .research_resources import ResourceService
 
 
 class ResearchVerdict(BaseModel):
@@ -85,7 +86,7 @@ def _positive_finite_seconds(value):
 
 
 class ResearchService(
-    GuidedResearch, MethodService, NotebookService, ProgressService, ControlService
+    GuidedResearch, MethodService, NotebookService, ProgressService, ControlService, ResourceService
 ):
     def __init__(self, root):
         self.root = Path(root).resolve(strict=True)
@@ -254,7 +255,7 @@ class ResearchService(
         paths = list(dict.fromkeys([source, *inputs]))
         hashes = {p: sha(self._source(p)) for p in paths}
         runtime = None
-        remote = self.manifest.get("execution_pool", {}).get("capabilities", {}).get(capability)
+        remote = (self.execution_pool() or {}).get("capabilities", {}).get(capability)
         if capability:
             if remote:
                 runtime = remote["runtime_sha256"]
@@ -363,8 +364,11 @@ class ResearchService(
         for p in outputs:
             if Path(p).is_absolute() or ".." in Path(p).parts:
                 raise ValueError("Result paths must stay inside the experiment workspace")
+        sizes = [self._source(p).stat().st_size for p in dict.fromkeys([source, *inputs])]
+        if sum(sizes) > self.storage_limits()["max_experiment_bytes"]:
+            raise ValueError("Declared inputs exceed experiment storage limits")
         binding = self._binding(source, args, inputs, capability)
-        pool = self.manifest.get("execution_pool")
+        pool = self.execution_pool()
         selected_machine = None
         if pool and (not capability or capability in pool["capabilities"] or machine):
             from .worker_protocol import Resources
@@ -382,9 +386,6 @@ class ResearchService(
             raise ValueError("Declared outputs cannot also be supplied inputs")
         self.check_method(binding, method, stage)
         self.validate_experiment_context(parent_experiment, purpose, plan)
-        sizes = [self._source(p).stat().st_size for p in binding["inputs"]]
-        if sum(sizes) > self.manifest["max_experiment_bytes"] or max(sizes) > 512 * 1024**2:
-            raise ValueError("Declared inputs exceed experiment storage limits")
         if commitment:
             frozen = self._read("commitments", commitment)
             if binding not in frozen["bindings"]:
@@ -418,6 +419,7 @@ class ResearchService(
             if time.time() >= self.manifest["deadline"]:
                 raise ValueError("Study deadline exhausted")
             used = BubblewrapSandbox._tree_bytes(self.root / "experiments")
+            limits = self.storage_limits()
             reserved = sum(
                 max(
                     0,
@@ -430,8 +432,8 @@ class ResearchService(
                 if x["status"] in ["queued", "running"]
             )
             workspace_limit = min(
-                self.manifest["max_experiment_bytes"],
-                self.manifest["max_total_bytes"] - used - reserved,
+                limits["max_experiment_bytes"],
+                limits["max_total_bytes"] - used - reserved,
             )
             if workspace_limit < sum(sizes) + 1024**2:
                 raise ValueError("Insufficient study storage reservation; await active experiments")
@@ -867,9 +869,9 @@ class ResearchService(
             hypothesis=self.manifest["hypothesis"],
             remaining_seconds=max(0, self.manifest["deadline"] - time.time()),
             deadline=self.manifest["deadline"],
-            resource_limits={
-                k: self.manifest[k] for k in ["max_experiment_bytes", "max_total_bytes"]
-            },
+            resource_limits=self.storage_limits(),
+            resource_policy=self.resource_policy(),
+            storage_adjustments=self._all("storage_adjustments"),
             completion_policy=self.manifest.get("completion_policy", "repair"),
             original_disposition="supported"
             if original_supported
@@ -992,7 +994,7 @@ class ResearchService(
 
     def machines(self):
         """Frozen execution pool and machine-scoped instrument identities."""
-        pool = self.manifest.get("execution_pool")
+        pool = self.execution_pool()
         if not pool:
             return {"local": {"execution_backend": self.manifest.get("execution_backend")}}
         return {
@@ -1046,7 +1048,7 @@ class ResearchService(
     def read_instrument(self, capability, **kwargs):
         from .execution_pool import MachineRegistry
 
-        pool = self.manifest.get("execution_pool") or {}
+        pool = self.execution_pool() or {}
         entry = pool.get("capabilities", {}).get(capability)
         if not entry:
             raise ValueError("Choose a machine-scoped instrument alias")
@@ -1107,8 +1109,8 @@ class Lab:
     def method(self, **kwargs):
         return self._service.method(**kwargs)
 
-    def register_capability(self, name):
-        return self._service.register_capability(name)
+    def register_capability(self, name, **kwargs):
+        return self._service.register_capability(name, **kwargs)
 
     def note(self, statement, **kwargs):
         return self._service.note(statement, **kwargs)

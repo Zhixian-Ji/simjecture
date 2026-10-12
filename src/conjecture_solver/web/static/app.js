@@ -1649,6 +1649,7 @@ function renderResearchTrace() {
       element("p", "field-help", "Stops individual experiments and requests replans. Scientific claim acceptance remains separate."));
     const route = engine.director_route || {};
     if (route.model) director.append(element("p", "field-help", `Director route: ${[route.backend, route.model, route.reasoning_effort].filter(Boolean).join(" · ")}`));
+    if (engine.resource_limits?.max_experiment_bytes) director.append(element("p", "field-help", `Storage allowance: ${formatBytes(engine.resource_limits.max_experiment_bytes)} per experiment and file · ${formatBytes(engine.resource_limits.max_total_bytes)} shared study allowance. ${engine.resource_policy?.director_can_increase ? "Director may increase allowances with a recorded reason." : "Storage increases require operator delegation."}`));
     if (engine.director_policy?.enabled) {
       const policy = engine.director_policy;
       director.append(element("p", "field-help", `Strategy review interval: ${formatDuration(policy.interval_seconds || 300)}. Healthy experiments with unchanged work may wait up to ${formatDuration(policy.unchanged_review_seconds || policy.interval_seconds || 300)}; operational checks continue.`));
@@ -1660,6 +1661,10 @@ function renderResearchTrace() {
       copy.append(element("strong", null, `${d.decision === "replan" ? "Stop / replan" : "Continue strategy"} · budget ${d.budget_feasibility} · science ${d.scientific_feasibility}`),
         element("p", null, d.rationale), element("p", null, `Next action: ${d.next_action}`));
       if (d.wake_worker) copy.append(element("p", "field-help", "Worker wake-up requested · prepare or analyze work while experiments continue."));
+      if (d.storage_action?.status === "granted") {
+        const grant = d.storage_action.adjustment;
+        copy.append(element("p", "field-help", `Storage increase granted: ${formatBytes(grant.before.max_experiment_bytes)} → ${formatBytes(grant.after.max_experiment_bytes)} per experiment and file; ${formatBytes(grant.before.max_total_bytes)} → ${formatBytes(grant.after.max_total_bytes)} shared study allowance. Applies to new experiments; prior reservations and deadline unchanged. Worker resumed.`), element("p", "field-help", grant.request.reason));
+      } else if (d.storage_action?.status === "rejected") copy.append(element("p", "warning-list", `Storage increase rejected: ${d.storage_action.error}`));
       for (const action of d.control_actions || []) copy.append(element("p", "field-help", `Stop requested: ${action.experiment} · ${action.status} · ${action.cancellation_confirmed ? "stop confirmed" : "awaiting confirmation"}${action.error ? ` · recorded control error: ${action.error}` : ""} · partial data retained when available`));
       copy.append(element("p", "field-help", d.acknowledgement ? `Worker ${d.acknowledgement.response}: ${d.acknowledgement.reason}` : d.decision === "replan" ? "Awaiting worker plan or challenge" : "No replan acknowledgement required"));
       card.append(element("span", "event-mark", d.decision === "replan" ? "↻" : "✓"), copy);director.append(card);

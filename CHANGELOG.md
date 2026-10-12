@@ -4,6 +4,19 @@ This project follows semantic versioning. Dates use ISO 8601.
 
 ## Unreleased
 
+- Fix large scientific builds being stopped by a separate 512 MiB file ceiling:
+  use the admitted workspace allowance for individual files and input staging,
+  reject oversized inputs before hashing, and record executor identity and limits.
+- Let operators delegate recorded storage increases to the research director.
+  Grants wake the worker and apply to future admissions; existing reservations,
+  scientific requirements and deadlines remain unchanged. Hosted allowances remain
+  protected by default. Show delegated authority, current allowances and recorded
+  grants or rejections in the research monitor.
+- Fix the generated client's registration argument collision and support newly
+  built instruments on frozen SSH workers. Append machine-scoped identities usable
+  for execution, source inspection and methods review while preserving original
+  instrument and worker identities.
+
 ## 0.6.2rc1 — 2026-10-09
 
 - Add optional local workspaces and project collections, with a workspace switcher,

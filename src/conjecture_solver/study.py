@@ -88,6 +88,10 @@ def configure_parser(parser):
         help="Research director can stop experiments and request replans (minimal)",
     )
     parser.add_argument("--quiet", action="store_true", help="Suppress live terminal progress")
+    parser.add_argument(
+        "--director-storage-increases", action="store_true", default=None,
+        help="Delegate recorded storage allowance increases to the director (minimal)",
+    )
     parser.set_defaults(handler=run)
 
 

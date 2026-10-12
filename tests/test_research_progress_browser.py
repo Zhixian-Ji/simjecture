@@ -21,6 +21,15 @@ def test_recorded_progress_and_cost_are_visible(tmp_path, width, register_target
     s = ResearchService.create(
         tmp_path / "study", "A radiation contribution bound", wall_seconds=600
     )
+    s.configure_resource_policy(director_can_increase=True, reason="Dedicated test workspace")
+    storage_grant = s.increase_storage(
+        dict(
+            max_experiment_bytes=32 * 1024**3,
+            max_total_bytes=256 * 1024**3,
+            reason="Retained checkpoint files and a large binary require a larger allowance.",
+        ),
+        director_decision="director_test",
+    )
     (s.work / "calc.py").write_text("print(1)\n")
     identifier = "exp_" + "b" * 24
     workspace = s.root / "experiments" / identifier / "workspace"
@@ -96,6 +105,7 @@ def test_recorded_progress_and_cost_are_visible(tmp_path, width, register_target
             budget_feasibility="infeasible",
             rationale="This early-time calculation cannot reach the radiation peak in budget.",
             next_action="Test a complete adaptive trajectory before refining diagnostics.",
+            storage_action=dict(status="granted", adjustment=storage_grant),
             control_actions=[
                 dict(
                     experiment=live_id,
@@ -152,6 +162,9 @@ def test_recorded_progress_and_cost_are_visible(tmp_path, width, register_target
             director = page.locator(".research-director")
             playwright.expect(director).to_contain_text("budget infeasible")
             playwright.expect(director).to_contain_text("Strategy review interval:")
+            playwright.expect(director).to_contain_text("Storage increase granted:")
+            playwright.expect(director).to_contain_text("Director may increase allowances")
+            playwright.expect(director).to_contain_text("prior reservations and deadline unchanged")
             playwright.expect(director).to_contain_text("Awaiting worker plan or challenge")
             playwright.expect(director).to_contain_text("awaiting confirmation")
             playwright.expect(director).to_contain_text(

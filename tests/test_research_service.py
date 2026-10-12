@@ -163,7 +163,7 @@ def test_oversized_input_rejected_before_copy_or_launch(tmp_path):
     s = service(tmp_path)
     # Sparse file exercises the limit without consuming the corresponding disk space.
     with (s.work / "large.bin").open("wb") as f:
-        f.truncate(513 * 1024**2)
+        f.truncate(s.manifest["max_experiment_bytes"] + 1)
     with pytest.raises(ValueError, match="storage limits"):
         s.run("calc.py", inputs=["large.bin"], outputs=["result.json"])
     assert not list((s.root / "experiments").iterdir())

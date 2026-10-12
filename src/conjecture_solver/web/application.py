@@ -710,6 +710,8 @@ def _engine_projection(
             director_policy=status.get("director_policy", {}),
             director_route=status.get("director_route", {}),
             director_decisions=status.get("director_decisions", []),
+            resource_limits=status.get("resource_limits", {}),
+            resource_policy=status.get("resource_policy", {}),
             director_next_review_at=status.get("director_next_review_at"),
             director_deferred_count=status.get("director_deferred_count", 0),
             live_experiments=status.get("live_experiments", []),

@@ -79,14 +79,76 @@ class MethodService:
             r["name"]: r["runtime_sha256"] for r in self._all("capability_additions")
         }
 
-    def register_capability(self, name):
+    def execution_pool(self):
+        """Frozen workers plus append-only instrument registrations."""
+        pool = self.manifest.get("execution_pool")
+        if not pool:
+            return None
+        capabilities = dict(pool["capabilities"])
+        for record in self._all("capability_additions"):
+            if remote := record.get("remote_capability"):
+                if record["name"] in capabilities and capabilities[record["name"]] != remote:
+                    raise ValueError("Existing capability identity is immutable")
+                capabilities[record["name"]] = remote
+        return pool | {"capabilities": capabilities}
+
+    def _remote_registration(self, name, machine):
+        from .execution_pool import MachineRegistry
+        from .worker_protocol import PROTOCOL
+
+        pool = self.execution_pool()
+        if not pool or machine not in pool["workers"]:
+            raise ValueError("Choose a frozen execution machine for capability registration")
+        worker = pool["workers"][machine]
+        probe = MachineRegistry(pool["registry"]).transport(machine, frozen=worker).call(
+            "probe", timeout=60
+        )
+        if probe.get("protocol") != PROTOCOL or abs(probe["clock"] - time.time()) > 30:
+            raise ValueError("Worker protocol or clock differs from the frozen study")
+        for key in ("worker_id", "worker_code_sha256", "config_sha256"):
+            if probe.get(key) != worker["probe"].get(key):
+                raise ValueError("Worker identity or configuration changed since study preparation")
+        if probe["capacity"] != worker["profile"]["config"] or not probe["execution"]["available"]:
+            raise ValueError("Worker capacity or exact experiment launcher is unavailable")
+        for entry in pool["capabilities"].values():
+            if entry["machine"] == machine and probe["capabilities"].get(
+                entry["worker_capability"], {}
+            ).get("contract_sha256") != entry["runtime_sha256"]:
+                raise ValueError(
+                    "Existing capability identity is immutable; restore it and use a new name"
+                )
+        descriptor = probe["capabilities"].get(name)
+        if not descriptor or not re.fullmatch(
+            r"[a-f0-9]{64}", descriptor.get("contract_sha256", "")
+        ):
+            raise ValueError(
+                "New instrument is not available in the worker's configured capability directory"
+            )
+        return f"{name}--at-{machine}", dict(
+            machine=machine,
+            worker_capability=name,
+            runtime_sha256=descriptor["contract_sha256"],
+            descriptor=descriptor,
+        )
+
+    def register_capability(self, name, *, machine=None):
         """Append a newly built runtime without changing any existing capability identity."""
         from .research_service import fingerprint, put
 
-        if not self.manifest.get("capabilities"):
-            raise ValueError("Study has no operator-configured capability directory")
-        registry = MVPCapabilityRegistry.discover(self.manifest["capabilities"])
-        runtime = registry.get(name).contract_hash
+        remote = None
+        if machine is not None or not self.manifest.get("capabilities"):
+            pool = self.execution_pool()
+            if machine is None:
+                if not pool:
+                    raise ValueError("Study has no operator-configured capability directory")
+                if len(pool["workers"]) != 1:
+                    raise ValueError("Specify machine for remote capability registration")
+                machine = next(iter(pool["workers"]))
+            name, remote = self._remote_registration(name, machine)
+            runtime = remote["runtime_sha256"]
+        else:
+            registry = MVPCapabilityRegistry.discover(self.manifest["capabilities"])
+            runtime = registry.get(name).contract_hash
         with self.lock():
             prior = self.capability_hashes().get(name)
             if prior is not None and prior != runtime:
@@ -96,6 +158,8 @@ class MethodService:
             if time.time() >= self.manifest["deadline"]:
                 raise ValueError("Study deadline exhausted")
             body = dict(name=name, runtime_sha256=runtime, created_at=time.time())
+            if remote:
+                body["remote_capability"] = remote
             directory = self.root / "capability_additions"
             directory.mkdir(exist_ok=True)
             put(directory / (fingerprint(name) + ".json"), body)

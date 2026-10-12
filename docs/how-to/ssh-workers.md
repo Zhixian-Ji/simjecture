@@ -10,6 +10,13 @@ worker. A worker needs Python and the numerical runtime, but no model subscripti
 provider key, web server or copy of the research supervisor. Local and SSH workers
 share the same versioned execution protocol and numerical launcher.
 
+New solver builds can be registered during a study without re-preparing its frozen
+worker. Add a separately named descriptor in an existing worker capability directory,
+then call `lab.register_capability("new-build", machine="node-a")`. Use its returned
+machine-scoped name for experiments and methods review. The host verifies original
+instrument hashes and worker identity before appending it. See
+[building and qualifying a new runtime](minimal-oversight.md#building-a-new-runtime).
+
 ![One coordinator dispatches to local and SSH workers](../_static/architecture/ssh-workers.svg)
 
 ## Prepare through the workspace

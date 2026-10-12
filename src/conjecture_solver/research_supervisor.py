@@ -95,6 +95,11 @@ class ResearchSupervisor(
         super().__init__(args)
         self.service = ResearchService(self.root)
         self.service.freeze_protocol(args.instructions_file.read_text())
+        if getattr(args, "director_storage_increases", None) is not None:
+            self.service.configure_resource_policy(
+                director_can_increase=args.director_storage_increases,
+                reason="Operator selected --director-storage-increases at campaign launch.",
+            )
         self.state["deadline"] = self.service.manifest["deadline"]
         policy = {
             "enabled": bool(getattr(args, "director_enabled", False)),
@@ -122,9 +127,9 @@ class ResearchSupervisor(
         self.service.work.joinpath("lab.py").write_text(f"""# Generated local scientific client.
 import json, subprocess
 class Client:
-    def _call(self, name, **arguments):
+    def _call(self, operation, **arguments):
         p = subprocess.run([{sys.executable!r}, '-m', 'conjecture_solver.research_service',
-            '--root', {str(self.root)!r}, '--call', name], input=json.dumps(arguments),
+            '--root', {str(self.root)!r}, '--call', operation], input=json.dumps(arguments),
             capture_output=True, text=True, env=__import__('os').environ | {{
                 'PYTHONPATH': {str(Path(__file__).resolve().parents[1])!r}}})
         receipt = json.loads(p.stdout)
@@ -150,7 +155,8 @@ class Client:
     def review_status(self, identifier): return self._call('review_status', identifier=identifier)
     def reproduce_anchor(self, **kw): return self._call('reproduce_anchor', **kw)
     def method(self, **kw): return self._call('method', **kw)
-    def register_capability(self, name): return self._call('register_capability', name=name)
+    def register_capability(self, name, **kw):
+        return self._call('register_capability', name=name, **kw)
     def note(self, statement, **kw): return self._call('note', statement=statement, **kw)
     def notes(self, **kw): return self._call('notes', **kw)
     def brief(self, **kw): return self._call('brief', **kw)
@@ -322,8 +328,12 @@ Write source normally here. All recorded numerical experiments use the existing 
   receipt immediately. List every local dependency in inputs. Standard installed Python
   libraries need not be copied. Paths in args refer to the isolated experiment workspace.
   It snapshots source/inputs automatically. Identical calls replay; change key to replicate.
-  Storage limits: {self.service.manifest["max_experiment_bytes"]} bytes per experiment,
-  {self.service.manifest["max_total_bytes"]} bytes total, shared with active experiments.
+  Current storage allowances: {self.service.storage_limits()["max_experiment_bytes"]} bytes
+  per experiment (also the per-file limit), {self.service.storage_limits()["max_total_bytes"]}
+  bytes total, shared with active experiments. lab.status() reports current allowances.
+  If storage blocks useful work, record the required allowance and reason in lab.note.
+  A director with operator-delegated authority can increase these for future experiments;
+  existing receipts and the campaign deadline remain unchanged.
   Installed capability names: {list(self.service.capability_hashes())}.
 - lab.machines() lists the frozen execution workers, resource budgets and machine-scoped
   capability aliases. In a configured pool, lab.run accepts machine='worker-id' and
@@ -374,7 +384,10 @@ Write source normally here. All recorded numerical experiments use the existing 
   do not extrapolate an analysis runtime as simulation throughput. Use measured coverage
   and remaining cost to choose useful next work. You retain control over your strategy.
 - After building a new instrument, add its descriptor to the configured capability
-  directory and call lab.register_capability('new-name'). Existing identities cannot change.
+  directory and call lab.register_capability('new-name', machine='worker-id') for an SSH
+  worker, or omit machine for a local instrument. A study with one SSH worker can infer it.
+  Use the returned name (the machine-scoped alias) in run/method/commit/read_instrument.
+  Existing identities cannot change; new runtime variants need new names and qualification.
 - Keep raw arrays in outputs, with a compact result.json; optionally specify
   review_documents=['result.json']. Reviewers see compact documents and raw file hashes,
   not binary contents. Use strict JSON (null plus an explicit reason for undefined values),

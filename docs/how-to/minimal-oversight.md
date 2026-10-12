@@ -65,10 +65,59 @@ The service appends its hash without replacing any original or previously added 
 Changing a runtime requires a new name. Registration proves identity, not qualification.
 The runtime still needs commissioning and methods review.
 
+For an execution worker, place the descriptor in one of that worker's already
+configured capability directories and register it on that machine:
+
+```python
+instrument = lab.register_capability("warpx-new-build", machine="gpu-worker")
+lab.run("calculation.py", capability=instrument["name"],
+        outputs=["result.json"], stage="exploration")
+```
+
+The returned name includes the machine alias. It also works with `lab.method`,
+`lab.commit` and `lab.read_instrument`, and appears in `lab.machines()`.
+A study with exactly one worker can infer the machine. Registration verifies the
+worker identity, launcher and existing instrument hashes; it does not replace the
+frozen execution pool. Keep original descriptors and reference sources protected,
+and give builders permission to add separate descriptors rather than edit originals.
+
 Operators may authorize inspection of solver source through their selected provider.
 Protect the reference installation with filesystem read-only permissions and use a
 separate writable problem/build directory. Include source/build hashes and compiler
 logs in the build record. Source-access permission is distinct from publication permission.
+
+## Adjustable storage allowances
+
+Experiments have a workspace allowance and the study has a shared storage allowance.
+The process's per-file ceiling follows its admitted workspace allowance, including
+build outputs; it has no additional fixed 512 MiB ceiling. Input staging is bounded
+by the same workspace allowance. Time, memory and aggregate storage checks remain.
+Receipts report the executor hash and actual execution limits.
+
+On a dedicated machine, an operator can delegate storage increases at launch:
+
+```bash
+simjecture study --campaign ./study --hypothesis-file hypothesis.txt \
+  --director --director-storage-increases
+```
+
+The director sees current allowances and its authority. It can request larger
+`max_experiment_bytes` and `max_total_bytes` in its structured decision, with a reason.
+The host grants authorized increases and wakes the worker; rejected requests remain
+visible in the director record. There is no extra preset ceiling on a delegated
+increase, but physical disk space and operator-owned shared-machine capacity remain
+finite. Workers can explain blockers in `lab.note`; they cannot grant themselves
+more storage through the worker API. Hosted/shared deployments retain their limits
+unless the operator explicitly delegates this authority.
+
+Every grant records its director decision, reason, sequence and before/after values
+in `storage_adjustments/`. `lab.status()` exposes the current allowances and history.
+The research monitor's **Evidence & review → Research director** section shows current
+allowances, delegated authority, granted before/after values, reasons and rejected requests.
+New experiments use the increased allowance; existing experiments keep their original
+reservation. Neither grants nor restarts extend the campaign deadline or change the
+scientific contract. An operator may enable this for an existing dedicated study with
+`ResearchService(root).configure_resource_policy(director_can_increase=True, reason=...)`.
 
 ## Progress recovery
 

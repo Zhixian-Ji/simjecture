@@ -9,6 +9,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .agent_supervisor import parse_judge_stream
+from .research_resources import StorageIncrease
 from .research_service import fingerprint, put
 
 
@@ -27,6 +28,10 @@ class DirectorVerdict(BaseModel):
         ),
     )
     next_action: str = Field(min_length=16, max_length=2400)
+    storage_increase: StorageIncrease | None = Field(
+        default=None,
+        description="Request larger storage allowances when operator authority permits.",
+    )
 
     @model_validator(mode="after")
     def coherent(self):
@@ -81,6 +86,8 @@ class ResearchDirector:
             worker_waiting_for=list(self.state.get("waiting_for", [])),
             previous_decisions=self.service.director_status()[:2],
             pending_replan=self.service.pending_director_replan(),
+            resource_limits=snapshot["resource_limits"],
+            resource_policy=snapshot["resource_policy"],
             first_strategy_review=not bool(previous),
             evidence_changes={
                 kind: [
@@ -92,7 +99,8 @@ class ResearchDirector:
                 for kind, index in records.items()
             },
             record_index=records,
-            authority="Execution strategy only; cannot change hypothesis or approve claims",
+            authority=("Execution strategy and delegated storage increases; "
+                       "cannot change hypothesis or approve claims"),
         )
 
     def director_prompt(self, packet):
@@ -105,6 +113,14 @@ You do not accept scientific claims or change the original hypothesis, operator 
 deadline or evidence rules. Independent scientific review remains a separate fresh context.
 Read-only source/data/documentation inspection is available. Do not modify files, send
 control commands yourself or run simulations. Return a structured decision for the host.
+When resource_policy.director_can_increase is true, you may set storage_increase to larger
+max_experiment_bytes and max_total_bytes with a concrete reason. These are adjustable
+allowances, not scientific constraints. Use actual build/output sizes and expected retention.
+The host records before/after allowances and applies them to new experiments only. A larger
+experiment allowance also raises its per-file ceiling. There is no additional fixed 512 MiB
+ceiling. Existing jobs retain their recorded reservations. Disk space and shared host capacity
+remain finite: do not grant unjustified storage or assume the allowance creates physical space.
+Without this delegated authority, report the blocker to the operator; do not request a grant.
 
 Use an MVP research strategy: establish an affordable end-to-end trajectory through the
 scientifically relevant window before spending the campaign polishing early-time diagnostics.
@@ -176,6 +192,8 @@ SCHEMA:
                 operator_steering=packet["operator_steering"],
                 pending_replan=packet["pending_replan"],
                 context_warning=packet["snapshot"].get("context_warning"),
+                resource_limits=packet.get("resource_limits"),
+                resource_policy=packet.get("resource_policy"),
             )
         )
 
@@ -288,6 +306,15 @@ SCHEMA:
                 **verdict,
             )
             put(folder / (identifier + ".json"), record)
+            if verdict["storage_increase"]:
+                try:
+                    adjustment = self.service.increase_storage(
+                        verdict["storage_increase"], director_decision=identifier
+                    )
+                    record["storage_action"] = dict(status="granted", adjustment=adjustment)
+                except (OSError, ValueError) as error:
+                    record["storage_action"] = dict(status="rejected", error=str(error)[:500])
+                put(folder / (identifier + ".json"), record)
             for action in record["control_actions"]:
                 try:
                     stopped = self.service.cancel(
@@ -315,7 +342,10 @@ SCHEMA:
                 director_strategy_signature=signature,
                 director_seen_records=packet["record_index"],
             )
-            wake_worker = verdict["decision"] == "replan" or verdict["wake_worker"]
+            wake_worker = (
+                verdict["decision"] == "replan" or verdict["wake_worker"]
+                or record.get("storage_action", {}).get("status") == "granted"
+            )
             if wake_worker:
                 self.state["director_wake_worker"] = True
             self.event("research_director", decision=identifier, verdict=verdict)
