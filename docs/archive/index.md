@@ -69,6 +69,7 @@ corrections together with the claimed result.
 - [Adaptive aluminium campaign audit, 2026-10-04](../research/adaptive-campaign-audit-20261004.md)
 - [Z-pinch execution and timestep repair qualification, 2026-10-03](../testing/zpinch-repair-qualification-20261003.md)
 - [Research director and adaptive FLASH qualification, 2026-10-03](../testing/research-director-adaptive-20261003.md)
+- [Large-build, remote-registration and director storage repairs, 2026-10-12](../testing/large-build-remote-registration.md)
 - [Stagnation retrospective, 2026-09-29](../research/stagnation-retrospective-20260929.md)
 - [Stagnation video outline, 2026-09-29](../research/stagnation-video-outline-20260929.md)
 
@@ -83,6 +84,7 @@ corrections together with the claimed result.
 ../research/adaptive-campaign-audit-20261004
 ../testing/zpinch-repair-qualification-20261003
 ../testing/research-director-adaptive-20261003
+../testing/large-build-remote-registration
 ../research/stagnation-retrospective-20260929
 ../research/stagnation-video-outline-20260929
 ```

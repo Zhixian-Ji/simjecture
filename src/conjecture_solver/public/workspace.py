@@ -68,6 +68,7 @@ class HostedWorkspace:
                 "upload_files": bool(self.store.account(owner)),
                 "general_execution": bool(self.settings().get("executor_qualified")),
                 "native_commands": False,
+                "solver_development": False,
             },
         }
 
@@ -429,6 +430,8 @@ class HostedWorkspace:
         )
 
     def brief(self, p, values):
+        if values.get("allow_solver_development") not in (None, False):
+            raise PermissionError("Hosted solver development is managed by the host")
         question = str(
             values.get("question")
             or ("Formulate and test a scientific hypothesis using recorded numerical evidence.")
@@ -470,6 +473,7 @@ class HostedWorkspace:
             "completion_policy": "answer",
             "capability_directory": "hosted-tools",
             "machine_ids": [],
+            "allow_solver_development": False,
         }
         self.store.save_brief(p["id"], brief)
         return brief
@@ -609,6 +613,7 @@ class HostedWorkspace:
                 "completion_policy",
                 "capability_directory",
                 "machine_ids",
+                "allow_solver_development",
             },
             "launch": {
                 "project",
@@ -616,6 +621,7 @@ class HostedWorkspace:
                 "capability_directory",
                 "execution_backend",
                 "director_enabled",
+                "allow_solver_development",
                 "judge_model",
                 "judge_reasoning_effort",
             },
@@ -651,6 +657,8 @@ class HostedWorkspace:
             self.store.save_brief(p["id"], None)
             return {"message": "Ready to prepare another study"}
         if name == "launch":
+            if values.get("allow_solver_development") not in (None, False):
+                raise PermissionError("Hosted solver development is managed by the host")
             if values.get("capability_directory") not in (
                 None,
                 "",

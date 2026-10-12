@@ -131,10 +131,11 @@ class MethodService:
             descriptor=descriptor,
         )
 
-    def register_capability(self, name, *, machine=None):
+    def register_capability(self, name, *, machine=None, development=None):
         """Append a newly built runtime without changing any existing capability identity."""
         from .research_service import fingerprint, put
 
+        development = self.validate_development(development) if development is not None else None
         remote = None
         if machine is not None or not self.manifest.get("capabilities"):
             pool = self.execution_pool()
@@ -154,12 +155,23 @@ class MethodService:
             if prior is not None and prior != runtime:
                 raise ValueError("Existing capability identity is immutable; use a new name")
             if prior is not None:
+                if development is not None:
+                    previous = next((r for r in self._all("capability_additions")
+                                     if r["name"] == name), {})
+                    if previous.get("development") != development:
+                        raise ValueError("Registered development provenance is immutable")
                 return dict(name=name, runtime_sha256=prior)
+            if self.solver_development_policy()["allowed"] is False:
+                raise ValueError(
+                    "Solver development is disabled: use the supplied instrument implementations"
+                )
             if time.time() >= self.manifest["deadline"]:
                 raise ValueError("Study deadline exhausted")
             body = dict(name=name, runtime_sha256=runtime, created_at=time.time())
             if remote:
                 body["remote_capability"] = remote
+            if development is not None:
+                body["development"] = development
             directory = self.root / "capability_additions"
             directory.mkdir(exist_ok=True)
             put(directory / (fingerprint(name) + ".json"), body)
@@ -189,7 +201,10 @@ class MethodService:
                 or record.get("verdict", {}).get("evidence_requests")
             ):
                 raise ValueError("Method needs independent review; end this turn for the host")
-        elif stage == "evidence" and self.manifest.get("methods_required", False):
+        elif stage == "evidence" and (
+            self.manifest.get("methods_required", False)
+            or any(r["name"] == binding["capability"] for r in self._all("capability_additions"))
+        ):
             raise ValueError(
                 "Submit lab.method with source, model, geometry, observable, validation and "
                 "rationale; end this turn. Use stage='exploration' for commissioning."
@@ -316,6 +331,11 @@ class MethodService:
         body = dict(
             binding=binding,
             sources=sources,
+            solver_development=dict(
+                policy=self.solver_development_policy(),
+                registration=next((r for r in self._all("capability_additions")
+                                   if r["name"] == capability), None),
+            ),
             **fields,
             evidence=evidence,
             validation_experiments=list(validation_experiments),

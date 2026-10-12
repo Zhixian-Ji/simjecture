@@ -380,6 +380,8 @@ class SimjectureWebApplication:
                     backend=backend,
                     model=payload.get("model") or None,
                     judge_model=payload.get("judge_model") or None,
+                    allow_solver_development=payload.get("allow_solver_development", True)
+                    if mode == "minimal" else None,
                 )
             )
             request = factory(
@@ -712,6 +714,7 @@ def _engine_projection(
             director_decisions=status.get("director_decisions", []),
             resource_limits=status.get("resource_limits", {}),
             resource_policy=status.get("resource_policy", {}),
+            solver_development=status.get("solver_development", {}),
             director_next_review_at=status.get("director_next_review_at"),
             director_deferred_count=status.get("director_deferred_count", 0),
             live_experiments=status.get("live_experiments", []),

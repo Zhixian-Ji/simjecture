@@ -1375,6 +1375,7 @@ class Workspace(MachineWorkspace, ProjectCollections):
                     "guidance": guidance,
                     "hours": hours,
                     "capability_directory": info.get("capabilities") or "",
+                    "allow_solver_development": info.get("allow_solver_development"),
                     **({"machine_ids": machine_ids} if machine_ids else {}),
                 },
                 brief={
@@ -1387,6 +1388,8 @@ class Workspace(MachineWorkspace, ProjectCollections):
                     "constraints": guidance,
                     "hours": hours,
                     "completion_policy": "answer",
+                    "allow_solver_development": info.get("allow_solver_development")
+                    if info.get("allow_solver_development") is not None else True,
                     "capability_directory": info.get("capabilities") or "",
                     **({"machine_ids": machine_ids} if machine_ids else {}),
                 },
@@ -1516,6 +1519,9 @@ class Workspace(MachineWorkspace, ProjectCollections):
         brief["completion_policy"] = payload.get("completion_policy", "answer")
         brief["capability_directory"] = text(payload, "capability_directory", 4096)
         requested_machines = payload.get("machine_ids")
+        requested_development = payload.get("allow_solver_development")
+        if requested_development is not None and type(requested_development) is not bool:
+            raise ValueError("Solver development permission must be a boolean")
         if requested_machines is not None:
             if (
                 not isinstance(requested_machines, list)
@@ -1553,6 +1559,14 @@ class Workspace(MachineWorkspace, ProjectCollections):
         with self.lock():
             path = self.directory(identifier) / "project.json"
             project = load(path)
+            inherited_development = (project.get("brief") or {}).get(
+                "allow_solver_development",
+                (project.get("continuation_draft") or {}).get("allow_solver_development"),
+            )
+            brief["allow_solver_development"] = (
+                requested_development if requested_development is not None
+                else inherited_development if inherited_development is not None else True
+            )
             if requested_machines is None and "machine_ids" in (project.get("brief") or {}):
                 brief["machine_ids"] = project["brief"]["machine_ids"]
             elif requested_machines is None and "machine_ids" in (
@@ -2011,6 +2025,9 @@ class Workspace(MachineWorkspace, ProjectCollections):
                     reasoning_effort=config.get("reasoning_effort") or None,
                     judge_reasoning_effort=payload.get("judge_reasoning_effort") or None,
                     director_enabled=payload.get("director_enabled", True),
+                    allow_solver_development=payload.get(
+                        "allow_solver_development", brief.get("allow_solver_development", True)
+                    ),
                     provider_config=str(frozen) if config["backend"] == "builtin" else None,
                     completion_policy=brief["completion_policy"],
                     max_wall_seconds=brief["hours"] * 3600,

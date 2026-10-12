@@ -104,6 +104,8 @@ def test_browser_setup_chat_files_and_autonomous_handoff(tmp_path, provider):
             page.locator("#prepared-question").wait_for()
             page.screenshot(path=str(screenshots / "study-brief.png"), full_page=True)
             page.locator("#brief-editor > summary").click()
+            playwright.expect(page.locator("#solver-development")).to_be_checked()
+            page.locator("#solver-development").uncheck()
             page.locator("#brief-form .advanced > summary").click()
             playwright.expect(page.locator("#research-director")).to_be_checked()
             page.locator("#research-director").uncheck()
@@ -125,6 +127,7 @@ def test_browser_setup_chat_files_and_autonomous_handoff(tmp_path, provider):
                 saved = load(app.workspace.directory(project["id"]) / "project.json")
                 request = load(Path(saved["studies"][-1]["path"]) / "study-launch.json")["request"]
                 assert request["director_enabled"] is False
+                assert request["allow_solver_development"] is False
                 assert request["judge_model"] == "fixture-model"
                 assert request["judge_reasoning_effort"] == "high"
                 page.get_by_text("Accepted: falsified.", exact=False).wait_for()

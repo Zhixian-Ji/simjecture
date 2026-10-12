@@ -935,6 +935,7 @@ def execute(root, identifier):
         wall_seconds=max(1, job["deadline"] - time.time()) if job["deadline"] else 86400,
         execution_backend="process-cooperative",
         completion_policy="answer",
+        allow_solver_development=False if not (directory / "research.json").exists() else None,
     )
     service.manifest.update(max_experiment_bytes=128 * 1024**2, max_total_bytes=512 * 1024**2)
     put(service.root / "research.json", service.manifest)

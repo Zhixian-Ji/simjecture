@@ -73,9 +73,23 @@ def test_remote_append_runs_and_remains_source_bound(remote_study, tmp_path):
     manifest = (service.root / "research.json").read_bytes()
     old_hashes = service.capability_hashes()
     instrument(capabilities, tmp_path, "new-runtime")
-    added = service.register_capability("new-runtime", machine="native")
+    added = service.register_capability(
+        "new-runtime",
+        machine="native",
+        development=dict(
+            parent_capability="original--at-native",
+            change_type="numerical",
+            rationale="Register a separately versioned experimental implementation.",
+            preserved_assumptions="Preserve the readiness calculation and original instrument.",
+            validation_plan="Execute through the exact worker and inspect the new source.",
+        ),
+    )
     alias = "new-runtime--at-native"
     assert added["name"] == alias
+    assert (
+        service.solver_development_status()["builds"][0]["development"]["parent_capability"]
+        == "original--at-native"
+    )
     assert service.register_capability("new-runtime")["runtime_sha256"] == added["runtime_sha256"]
     assert service.capability_hashes().items() >= old_hashes.items()
     assert alias in ResearchService(service.root).machines()["native"]["capabilities"]

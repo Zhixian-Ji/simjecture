@@ -27,6 +27,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from .mvp_agent import BubblewrapSandbox
 from .mvp_skills import MVPCapabilityRegistry
 from .research_control import ControlService, ExperimentMonitor
+from .research_development import DevelopmentService
 from .research_guidance import GuidedResearch
 from .research_methods import MethodService
 from .research_notebook import NotebookService
@@ -86,7 +87,8 @@ def _positive_finite_seconds(value):
 
 
 class ResearchService(
-    GuidedResearch, MethodService, NotebookService, ProgressService, ControlService, ResourceService
+    GuidedResearch, MethodService, NotebookService, ProgressService, ControlService,
+    ResourceService, DevelopmentService
 ):
     def __init__(self, root):
         self.root = Path(root).resolve(strict=True)
@@ -110,11 +112,18 @@ class ResearchService(
         completion_policy=None,
         execution_pool=None,
         report_reserve_seconds=None,
+        allow_solver_development=None,
     ):
         root = Path(root).resolve()
+        if allow_solver_development is not None and type(allow_solver_development) is not bool:
+            raise ValueError("Solver development permission must be a boolean")
         root.mkdir(parents=True, exist_ok=True)
         if (root / "research.json").exists():
             existing = cls(root)
+            if allow_solver_development is not None and (
+                existing.solver_development_policy()["allowed"] != allow_solver_development
+            ):
+                raise ValueError("Solver development permission is immutable within a study")
             if existing.manifest["hypothesis"] != hypothesis:
                 raise ValueError("Original hypothesis is immutable")
             if (
@@ -178,6 +187,12 @@ class ResearchService(
                 workflow="minimal",
                 completion_policy=completion_policy,
                 execution_backend=execution_backend,
+                solver_development_policy=dict(
+                    allowed=True if allow_solver_development is None else allow_solver_development,
+                    source="operator_launch_setting",
+                    preserve_reference=True,
+                    qualification="source_bound_methods_review",
+                ),
                 hypothesis=hypothesis,
                 created_at=now,
                 deadline=now + wall_seconds,
@@ -675,6 +690,10 @@ class ResearchService(
                     "cite submitted experiments that tried to disprove the claim"
                 )
         commitment = self._read("commitments", claim) if claim != "root" else None
+        development_capabilities = {
+            self._read("experiments", identifier)["binding"]["capability"]
+            for identifier in request["experiments"]
+        }
         packet = dict(
             target_claim=dict(
                 id=claim,
@@ -686,6 +705,11 @@ class ResearchService(
             operator_steering=steering(self.root),
             protocol_sha256=self.manifest.get("protocol_sha256"),
             requirements=self.manifest.get("requirements", {}),
+            solver_development=dict(
+                policy=self.solver_development_policy(),
+                registrations=[r for r in self._all("capability_additions")
+                               if r["name"] in development_capabilities],
+            ),
             requirements_evaluation=instrument_requirement(
                 self.manifest, available=self.capability_hashes()
             ),
@@ -872,6 +896,7 @@ class ResearchService(
             resource_limits=self.storage_limits(),
             resource_policy=self.resource_policy(),
             storage_adjustments=self._all("storage_adjustments"),
+            solver_development=self.solver_development_status(compact=compact),
             completion_policy=self.manifest.get("completion_policy", "repair"),
             original_disposition="supported"
             if original_supported

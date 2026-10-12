@@ -89,6 +89,10 @@ def configure_parser(parser):
     )
     parser.add_argument("--quiet", action="store_true", help="Suppress live terminal progress")
     parser.add_argument(
+        "--allow-solver-development", action=argparse.BooleanOptionalAction, default=None,
+        help="Allow private experimental solver forks (new minimal studies default to allowed)",
+    )
+    parser.add_argument(
         "--director-storage-increases", action="store_true", default=None,
         help="Delegate recorded storage allowance increases to the director (minimal)",
     )
@@ -161,6 +165,19 @@ def _run(args):
     if saved_state and args.state_dir != saved_state.resolve():
         raise ValueError("State directory is part of the saved launch contract")
     mode = selected_mode(args.campaign, args.mode, args.state_dir)
+    requested_development = getattr(args, "allow_solver_development", None)
+    if mode != "minimal" and requested_development is not None:
+        raise ValueError("Solver development permission is supported in minimal mode only")
+    existing_research = read(args.campaign / "research.json")
+    if existing_research:
+        saved_development = existing_research.get("solver_development_policy", {}).get("allowed")
+        if requested_development is not None and requested_development != saved_development:
+            raise ValueError("Solver development permission is immutable within a study")
+        args.allow_solver_development = saved_development
+    else:
+        args.allow_solver_development = (
+            requested_development if requested_development is not None else True
+        ) if mode == "minimal" else None
     from .mvp_guidance import MVPGuidedCommissioningPackage
 
     guided = (
@@ -252,6 +269,10 @@ def _run(args):
         if mode != "minimal" or (args.campaign / "research.json").exists():
             raise ValueError("Continuation requires a new minimal study")
         prior = ResearchService(parent)
+        if requested_development is None:
+            inherited_development = prior.solver_development_policy()["allowed"]
+            if inherited_development is not None:
+                args.allow_solver_development = inherited_development
         hypothesis = hypothesis or prior.manifest["hypothesis"]
         args.capabilities = args.capabilities or prior.manifest.get("capabilities")
     if mode == "minimal":
@@ -271,6 +292,7 @@ def _run(args):
                 report_reserve_seconds=default_report_reserve(args.wall_seconds)
                 if not (args.campaign / "research.json").exists()
                 else None,
+                allow_solver_development=args.allow_solver_development,
             )
             if hypothesis is not None
             else ResearchService(args.campaign)
@@ -362,6 +384,7 @@ def _run(args):
             reasoning_effort=args.reasoning_effort,
             judge_reasoning_effort=args.judge_reasoning_effort,
             director_enabled=args.director_enabled,
+            allow_solver_development=args.allow_solver_development,
             capability_directory=str(args.capabilities) if args.capabilities else None,
             agent_executable=args.executable,
             provider_config=getattr(args, "provider_config", None),

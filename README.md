@@ -34,6 +34,12 @@ claim. New browser studies default to answer; the CLI defaults to repair. Both u
 minimal mode by default: flexible agent strategy, recorded experiments and explicit
 scientific acceptance. A deadline can leave the question unresolved.
 
+New minimal studies allow experimental solver development by default. The agent can
+work in a private source fork while preserving the reference installation. Changed
+builds need independent, source-bound qualification before supporting a claim. Turn
+this off in the study brief or with `--no-allow-solver-development`; see
+[solver development and qualification](https://drawingsword.com/simjecture/how-to/minimal-oversight.html#solver-development-permission).
+
 Read [how the loop works](https://drawingsword.com/simjecture/concepts/research-loop.html) or
 [how evidence is checked](https://drawingsword.com/simjecture/concepts/evidence-and-claims.html).
 

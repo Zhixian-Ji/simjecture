@@ -34,6 +34,7 @@ class NativeStudyRequest(MVPLaunchRequest):
     reasoning_effort: Literal["low", "medium", "high", "xhigh", "max", "ultra"] | None = None
     judge_reasoning_effort: Literal["low", "medium", "high", "xhigh", "max", "ultra"] | None = None
     director_enabled: bool = Field(default=True, strict=True)
+    allow_solver_development: bool | None = Field(default=True, strict=True)
     agent_executable: str | None = None
     machine_registry: str | None = None
     machine_ids: list[str] = []
@@ -43,6 +44,10 @@ def materialize_native(request, *, resume=False):
     root = Path(request.output_directory).expanduser().resolve()
     record = root / "study-launch.json"
     existing = read(record)
+    if not resume and not existing and request.mode == "minimal" and (
+        request.allow_solver_development is None
+    ):
+        raise ValueError("Choose a boolean solver development permission for a new study")
     model = request.model or ("glm-5.3" if request.backend == "codex-glm" else None)
     if not model:
         raise ValueError("Choose an explicit model for this backend")
@@ -65,6 +70,8 @@ def materialize_native(request, *, resume=False):
     if saved_request:
         if "director_enabled" not in saved_request:
             saved_request = saved_request | {"director_enabled": False}
+        if "allow_solver_development" not in saved_request:
+            saved_request = saved_request | {"allow_solver_development": None}
         saved_request = NativeStudyRequest.model_validate(saved_request).model_dump(mode="json")
     if existing and saved_request != request.model_dump(mode="json"):
         raise ValueError("Existing study launch contract differs")
@@ -104,6 +111,7 @@ def materialize_native(request, *, resume=False):
                 execution_backend=request.execution_backend,
                 completion_policy=request.completion_policy,
                 execution_pool=pool,
+                allow_solver_development=request.allow_solver_development,
             )
             service.freeze_protocol(protocol)
         else:
@@ -183,6 +191,9 @@ def materialize_native(request, *, resume=False):
     if request.judge_reasoning_effort:
         argv += ["--judge-reasoning-effort", request.judge_reasoning_effort]
     argv += ["--director" if request.director_enabled else "--no-director"]
+    if request.mode == "minimal" and request.allow_solver_development is not None:
+        argv += ["--allow-solver-development" if request.allow_solver_development
+                 else "--no-allow-solver-development"]
     put(
         record,
         dict(
@@ -215,6 +226,8 @@ def resume_native(root):
     saved = record["request"]
     if "director_enabled" not in saved:
         saved = saved | {"director_enabled": False}
+    if "allow_solver_development" not in saved:
+        saved = saved | {"allow_solver_development": None}
     return materialize_native(NativeStudyRequest.model_validate(saved), resume=True)
 
 

@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from conjecture_solver.research_service import ResearchService, put, sha
+from conjecture_solver.research_service import ResearchService, fingerprint, put, sha
 from conjecture_solver.web.application import SimjectureWebApplication
 from conjecture_solver.web.server import create_server
 
@@ -31,6 +31,34 @@ def test_recorded_progress_and_cost_are_visible(tmp_path, width, register_target
         director_decision="director_test",
     )
     (s.work / "calc.py").write_text("print(1)\n")
+    (s.root / "capability_additions").mkdir()
+    candidate = "python-transport-repair"
+    put(
+        s.root / "capability_additions" / (fingerprint(candidate) + ".json"),
+        dict(
+            name=candidate,
+            runtime_sha256="1" * 64,
+            created_at=time.time(),
+            development=dict(
+                parent_capability=None,
+                change_type="numerical",
+                rationale="Correct a recorded temperature transport error in a private fork.",
+                preserved_assumptions="Preserve the transport equation and benchmark conditions.",
+                validation_plan="Compare evolution, conservation and numerical refinement.",
+            ),
+        ),
+    )
+    method = s.method(
+        source="calc.py",
+        model="Finite numerical test",
+        geometry="Bounded domain",
+        observable="Defined numerical accuracy",
+        validation="Recorded evolution controls",
+        rationale="Readiness for the declared bounded benchmark",
+    )
+    method["binding"].update(capability=candidate, runtime_sha256="1" * 64)
+    method.update(scope="instrument", status="resolved", verdict=dict(decision="continue"))
+    put(s.root / "methods" / (method["id"] + ".json"), method)
     identifier = "exp_" + "b" * 24
     workspace = s.root / "experiments" / identifier / "workspace"
     workspace.mkdir(parents=True)
@@ -162,6 +190,18 @@ def test_recorded_progress_and_cost_are_visible(tmp_path, width, register_target
             director = page.locator(".research-director")
             playwright.expect(director).to_contain_text("budget infeasible")
             playwright.expect(director).to_contain_text("Strategy review interval:")
+            development = page.locator(".solver-development")
+            playwright.expect(development).to_contain_text("development allowed")
+            playwright.expect(development).to_contain_text(
+                "Instrument readiness · approved within reviewed scope"
+            )
+            playwright.expect(development).to_contain_text("independent qualification")
+            playwright.expect(
+                development.get_by_role("link", name="View registered build provenance")
+            ).to_have_attribute(
+                "href",
+                f"/api/artifact?campaign={campaign}&path=capability_additions%2F{fingerprint(candidate)}.json",
+            )
             playwright.expect(director).to_contain_text("Storage increase granted:")
             playwright.expect(director).to_contain_text("Director may increase allowances")
             playwright.expect(director).to_contain_text("prior reservations and deadline unchanged")

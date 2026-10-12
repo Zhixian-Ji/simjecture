@@ -158,12 +158,13 @@ def study_status(root):
         from .research_service import ResearchService
 
         director_decisions = ResearchService(root).director_status()
-    resource_limits, resource_policy = {}, {}
+    resource_limits, resource_policy, solver_development = {}, {}, {}
     if mode == "minimal":
         from .research_service import ResearchService
 
         service = ResearchService(root)
         resource_limits, resource_policy = service.storage_limits(), service.resource_policy()
+        solver_development = service.solver_development_status()
     from .research_finalization import report_status
 
     return dict(
@@ -173,6 +174,7 @@ def study_status(root):
         director_decisions=director_decisions,
         resource_limits=resource_limits,
         resource_policy=resource_policy,
+        solver_development=solver_development,
         director_next_review_at=state.get("director_next_review_at"),
         director_deferred_count=state.get("director_deferred_count", 0),
         diagnostic_errors=state.get("diagnostic_errors", {}),

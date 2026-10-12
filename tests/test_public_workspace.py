@@ -44,6 +44,29 @@ def project(client):
     return response.json()
 
 
+def test_hosted_solver_permission_cannot_be_expanded_by_the_client(app):
+    client = session(app)
+    p = project(client)
+    values = dict(
+        project=p["id"],
+        question="Test a bounded numerical hypothesis",
+        success_criteria="Recorded numerical evidence",
+        constraints="Use host tools",
+    )
+    response = client.post("/api/workspace/brief", json=values | {"allow_solver_development": True})
+    assert response.status_code == 403
+    response = client.post(
+        "/api/workspace/brief", json=values | {"allow_solver_development": False}
+    )
+    assert response.status_code == 200
+    assert response.json()["allow_solver_development"] is False
+    response = client.post(
+        "/api/workspace/launch", json={"project": p["id"], "allow_solver_development": True}
+    )
+    assert response.status_code == 403
+    assert client.get(f"/api/workspace/project?id={p['id']}").json()["studies"] == []
+
+
 def test_shared_assets_and_hosted_bootstrap_never_expose_credentials(app):
     client = session(app)
     app.state.login.credentials = {
@@ -54,6 +77,7 @@ def test_shared_assets_and_hosted_bootstrap_never_expose_credentials(app):
     assert boot.json()["hosting"]["quota"]["interactive"]["limit"] == 5
     assert boot.json()["hosting"]["quota"]["research"]["limit"] == 1
     assert boot.json()["hosting"]["login_available"] is True
+    assert boot.json()["hosting"]["permissions"]["solver_development"] is False
     assert "private-model-key" not in boot.text and "memory-only-secret" not in boot.text
     assert 'meta name="simjecture-hosted"' in client.get("/workspace").text
     for path in ("/assets/workspace.js", "/assets/workspace.css", "/assets/workspace-monitor.js"):

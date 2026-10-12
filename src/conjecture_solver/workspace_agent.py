@@ -523,6 +523,7 @@ def agent_tools(root, deadline, project=None, workspace=None):
             instrument: str = "",
             inherited_files: list[str] | None = None,
             machine_ids: list[str] | None = None,
+            allow_solver_development: bool | None = None,
         ) -> str:
             """Prepare an editable autonomous study brief for the user to launch.
             Preserve their objective. Ask about consequential missing information.
@@ -538,6 +539,8 @@ def agent_tools(root, deadline, project=None, workspace=None):
                 inherited_files: Parent research-relative paths for a continuation.
                     Omit to preserve the existing selection.
                 machine_ids: Prepared execution worker IDs. Omit to preserve the current selection.
+                allow_solver_development: Allow private solver forks; defaults true for new studies.
+                    Omit to preserve the user's current setting. Readiness is not evidence approval.
             """
             brief = workspace.save_brief(
                 project,
@@ -550,6 +553,7 @@ def agent_tools(root, deadline, project=None, workspace=None):
                     instrument=instrument,
                     inherited_files=inherited_files,
                     machine_ids=machine_ids,
+                    allow_solver_development=allow_solver_development,
                 ),
             )
             emit("brief", brief=brief)

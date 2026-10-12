@@ -59,11 +59,63 @@ are still available. Changing explicit task requirements requires a new study.
 
 ## Building a new runtime
 
+### Solver development permission
+
+New minimal studies **allow experimental solver development by default**. In
+**Autonomous research → Edit proposal**, use **Allow experimental solver development**
+to retain or disable this permission. The monitor's new-study dialog exposes the
+same choice. CLI launches use `--allow-solver-development` (the new-study default)
+or `--no-allow-solver-development`. The policy is frozen into the study contract;
+resuming cannot change it. Continuation preparation inherits an explicit parent
+choice and lets the operator change it for the new phase.
+
+Permission covers separately named experimental solver builds. Preserve the reference
+installation, record the need and validation plan, build in a writable fork, and retain
+exact source/build identities. It does not authorize publication or upstream changes.
+Turning it off keeps the supplied instrument implementations and blocks new capability
+registrations; experiment and analysis scripting remains available. Provider-native
+tools are unchanged. This is a scientific permission enforced in managed registration
+and review, not a new operating-system confinement boundary.
+
+Older studies without this field retain their original instructions. The software
+does not infer new permissions or retrofit their records. The restricted public trial
+retains its host-provided solver policy rather than advertising unsupported development.
+Explicit operator constraints and host filesystem permissions remain binding.
+
 An operator-authorized builder can produce a new capability descriptor. Place it in the
 study's configured capability directory, then call `lab.register_capability(name)`.
 The service appends its hash without replacing any original or previously added identity.
 Changing a runtime requires a new name. Registration proves identity, not qualification.
 The runtime still needs commissioning and methods review.
+
+Registration can include structured development provenance:
+
+```python
+build = lab.register_capability(
+    "warpx-repaired-transport", machine="gpu-worker",
+    development={
+        "parent_capability": "warpx-reference--at-gpu-worker",
+        "change_type": "numerical",  # numerical, physical, or diagnostic
+        "rationale": "Correct an observed transport error in the private implementation.",
+        "preserved_assumptions": "Keep the equations, geometry, drive and physical coefficients.",
+        "validation_plan": "Test advection, boundaries, conservation and numerical refinement.",
+        "build_experiments": ["exp_build_receipt"],
+    },
+)
+```
+
+Build receipt references must name completed recorded experiments. Metadata describes
+intent; runtime/source identity and numerical qualification still need verification.
+The worker, director and reviewers see the permission and recorded provenance.
+Numerical repairs should preserve the declared equations. Physical-model changes need
+declared variants and a prospective repair branch when outside the original claim.
+Implementation failures do not establish physical counterexamples.
+
+**Evidence & review → Solver development** shows registered versions, provenance,
+validation plans and method-review scopes. An approved instrument benchmark qualifies
+that benchmark only. Each evidence run using a newly registered build needs an approved
+production method matching its source, dependencies and runtime, even when the initial
+study had no installed instruments. No approval applies automatically to the whole solver.
 
 For an execution worker, place the descriptor in one of that worker's already
 configured capability directories and register it on that machine:

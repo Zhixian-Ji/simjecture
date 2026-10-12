@@ -4,6 +4,14 @@ This project follows semantic versioning. Dates use ISO 8601.
 
 ## Unreleased
 
+- Make experimental solver development a visible, default-on permission for new
+  minimal studies. Preserve older study instructions, inherit explicit choices in
+  continuations, and expose the policy through the GUI, CLI and agent drafting tools.
+- Record optional numerical/physical/diagnostic change provenance against separately
+  registered builds. Show reviewed method scopes in the research monitor and require
+  source-bound production-method approval for newly registered evidence instruments.
+  Preserve restricted hosted-study permissions and reference identities.
+
 - Fix large scientific builds being stopped by a separate 512 MiB file ceiling:
   use the admitted workspace allowance for individual files and input staging,
   reject oversized inputs before hashing, and record executor identity and limits.

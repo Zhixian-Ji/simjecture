@@ -234,6 +234,45 @@ def connect(workspace, url):
     workspace.test_connection()
 
 
+def test_study_brief_preserves_development_choice_across_agent_redrafting(tmp_path):
+    workspace = Workspace(tmp_path / "workspace")
+    project = workspace.create({"name": "Solver development"})
+    values = dict(
+        question="A bounded transport hypothesis",
+        success_criteria="Qualified evidence",
+        constraints="Keep the physical model fixed",
+        hours=1,
+    )
+    assert workspace.save_brief(project["id"], values)["allow_solver_development"] is True
+    assert (
+        workspace.save_brief(project["id"], values | {"allow_solver_development": False})[
+            "allow_solver_development"
+        ]
+        is False
+    )
+    assert (
+        workspace.save_brief(project["id"], values | {"allow_solver_development": None})[
+            "allow_solver_development"
+        ]
+        is False
+    )
+    with pytest.raises(ValueError, match="must be a boolean"):
+        workspace.save_brief(project["id"], values | {"allow_solver_development": "false"})
+
+
+def test_continuation_preparation_inherits_explicit_development_permission(tmp_path):
+    app = SimjectureWebApplication(runs_root=tmp_path / "runs", scan_roots=(tmp_path,))
+    parent = ResearchService.create(
+        tmp_path / "parent", "A bounded transport hypothesis", allow_solver_development=False
+    )
+    campaign = app.registry.register(parent.root)
+    prepared = app.workspace.prepare_continuation(
+        dict(campaign=campaign, guidance="Continue the matched numerical comparison", hours=1), app
+    )
+    project = app.workspace.project(prepared["project"])
+    assert project["brief"]["allow_solver_development"] is False
+
+
 def wait_for(fn, seconds=30):
     deadline = time.time() + seconds
     while time.time() < deadline:
@@ -454,7 +493,10 @@ def test_detected_cli_uses_existing_transport_and_persists_brief(tmp_path, monke
             )
         )
         assert result["messages"][-1]["content"] == "CLI preparation completed."
-        assert result["brief"] == brief | {"capability_directory": ""}
+        assert result["brief"] == brief | {
+            "capability_directory": "",
+            "allow_solver_development": True,
+        }
         assert (Path(result["files_directory"]) / "cli-result.txt").is_file()
         argv = load(Path(result["files_directory"]) / "cli-argv.json")
         assert 'model_reasoning_effort="high"' in argv

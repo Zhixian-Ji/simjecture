@@ -66,6 +66,7 @@ def preview(parent):
         hypothesis=manifest["hypothesis"],
         files=files,
         capabilities=manifest.get("capabilities"),
+        allow_solver_development=manifest.get("solver_development_policy", {}).get("allowed"),
         **(
             {"machine_ids": list(manifest["execution_pool"]["workers"])}
             if manifest.get("execution_pool")

@@ -567,6 +567,9 @@ function renderProject(force = false) {
       ["Constraints", b.constraints || "No additional constraints specified."],
       ["Time budget", b.hours===0 ? "No hosted time limit" : `${b.hours} hours`],
       ["Execution", b.machine_ids?.length ? b.machine_ids.join(", ") : "This host"],
+      ["Solver development", (b.allow_solver_development ?? !hosted)
+        ? "Private source forks allowed; changed methods require independent qualification."
+        : "Use supplied solver implementations; experiment and analysis scripts remain available."],
       [
         "Completion",
         b.completion_policy === "answer"
@@ -813,6 +816,11 @@ function renderProject(force = false) {
     $("brief-constraints").value = b.constraints || "";
     $("brief-hours").value = b.hours ?? 1;
     $("brief-policy").value = b.completion_policy || "answer";
+    $("solver-development").checked = b.allow_solver_development ?? !hosted;
+    $("solver-development").disabled = hosted || state.readonly;
+    $("solver-development-help").textContent = hosted
+      ? "Hosted policy: use supplied solver implementations. Experiment and analysis scripting remains available within host permissions."
+      : "The agent may modify private solver forks. Reference installations stay protected; changed methods need independent qualification before claim evidence.";
     if (
       b.capability_directory &&
       [...$("study-tools").options].some(
@@ -1270,6 +1278,7 @@ function briefPayload() {
     constraints: $("brief-constraints").value,
     hours: Number($("brief-hours").value),
     completion_policy: $("brief-policy").value,
+    allow_solver_development: $("solver-development").checked,
     capability_directory: $("study-tools").value,
     machine_ids: [...$("study-machines").selectedOptions].map(o=>o.value).filter(Boolean),
   };
@@ -1853,6 +1862,7 @@ async function launchStudy() {
     capability_directory: $("study-tools").value,
     execution_backend: $("execution-backend").value,
     director_enabled: $("research-director").checked,
+    allow_solver_development: $("solver-development").checked,
     judge_model: $("review-model").value.trim(),
     judge_reasoning_effort: $("review-effort").value || null,
   });

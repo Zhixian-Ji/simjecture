@@ -9,6 +9,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .agent_supervisor import parse_judge_stream
+from .research_development import development_guidance
 from .research_resources import StorageIncrease
 from .research_service import fingerprint, put
 
@@ -88,6 +89,7 @@ class ResearchDirector:
             pending_replan=self.service.pending_director_replan(),
             resource_limits=snapshot["resource_limits"],
             resource_policy=snapshot["resource_policy"],
+            solver_development=snapshot["solver_development"],
             first_strategy_review=not bool(previous),
             evidence_changes={
                 kind: [
@@ -163,8 +165,9 @@ proceed now, such as submitting completed qualification for review or analyzing 
 outputs while a simulation continues. Keep useful experiments running. Do not wake the
 worker merely to poll, restate limitations or wait again. A replan always wakes it and
 retains its acknowledgement requirement; a continue wake-up adds no new approval gate.
-SCHEMA:
 """
+            + development_guidance(packet["solver_development"]["policy"])
+            + "\nSCHEMA:\n"
             + json.dumps(DirectorVerdict.model_json_schema())
             + "\nPACKET:\n"
             + json.dumps({k: v for k, v in packet.items() if k != "record_index"})

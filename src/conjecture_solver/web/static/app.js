@@ -1671,6 +1671,24 @@ function renderResearchTrace() {
     }
     panel.append(director);
   }
+  if (engine.solver_development?.policy) {
+    const development = element("section", "solver-development"), policy = engine.solver_development.policy;
+    development.append(element("h3", null, "Solver development"), element("p", "field-help",
+      policy.allowed === true ? "Experimental solver development allowed · private forks, protected reference installations, independent qualification."
+        : policy.allowed === false ? "Experimental solver development disabled · use supplied solver implementations. Experiment and analysis scripting remains available."
+        : "Existing study · source permissions follow its saved operator instructions."));
+    development.append(element("p", "field-help", "Method approval applies to its reviewed source and scope. Instrument readiness is separate from production-method approval and scientific claim acceptance."));
+    for (const build of engine.solver_development.builds || []) {
+      const card = element("article", "trace-event"), copy = element("div", "trace-copy"), change = build.development;
+      copy.append(element("strong", null, build.name), element("p", "field-help", change ? `${change.change_type} change · parent ${change.parent_capability || "new instrument"}` : "Registered instrument · development provenance not declared"));
+      if (change) copy.append(element("p", null, change.rationale), element("p", "field-help", `Preserved assumptions: ${change.preserved_assumptions}`), element("p", "field-help", `Validation plan: ${change.validation_plan}`));
+      if (!build.method_reviews?.length) copy.append(element("p", "field-help", "Qualification pending · no reviewed method for this build."));
+      for (const review of build.method_reviews || []) copy.append(element("p", "field-help", `${review.scope === "instrument" ? "Instrument readiness" : "Production method"} · ${review.decision === "continue" ? "approved within reviewed scope" : review.decision === "revise" ? "revision required" : "review pending"} · ${review.source}`));
+      if (build.registration_path) { const link = element("a", null, "View registered build provenance"); link.href = artifactUrl(build.registration_path); link.target = "_blank"; link.rel = "noopener"; copy.append(link); }
+      card.append(element("span", "event-mark", "⌘"), copy); development.append(card);
+    }
+    panel.append(development);
+  }
   if (engine.receipt_progress?.length || engine.execution_costs?.length || engine.live_experiments?.length) {
     const coverage = element("section", "scientific-progress");
     coverage.append(element("h3", null, "Scientific coverage & cost"),
@@ -1912,6 +1930,7 @@ async function launchCampaign(event) {
     max_workspace_mb: Number(form.get("max_workspace_mb")),
     max_memory_mb: Number(form.get("max_memory_mb")),
   };
+  if (payload.mode === "minimal") payload.allow_solver_development = document.getElementById("launch-solver-development").value === "allow";
   ui["launch-button"].disabled = true;
   ui["launch-button"].textContent = "Launching…";
   ui["new-run-error"].hidden = true;
@@ -2311,6 +2330,7 @@ function updateLaunchRoute() {
   const backend = document.getElementById("launch-backend");
   const model = document.getElementById("launch-model");
   const legacy = mode.value === "legacy";
+  document.getElementById("launch-solver-development").disabled = mode.value !== "minimal";
   for (const option of backend.options) {
     option.disabled = legacy !== ["dsh", "api"].includes(option.value);
   }
