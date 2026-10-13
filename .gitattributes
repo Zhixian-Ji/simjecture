@@ -1,3 +1,5 @@
+*.sh text eol=lf
+
 # Preserve autonomous run artifacts byte-for-byte, including model-authored
 # formatting. Generated figures likewise need not satisfy source whitespace
 # checks.

@@ -1,6 +1,9 @@
 """ITER integration routes real execution and keeps unverified solvers distinct."""
 
 import json
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -9,6 +12,40 @@ from conjecture_solver.agent_skills import research_skills
 from conjecture_solver.cli import build_parser
 from conjecture_solver.deployment import DeploymentManager, DeploymentProfile
 from conjecture_solver.web.workspace import CATALOGUE, Workspace
+
+
+def test_iter_bootstrap_survives_autocrlf_checkout(tmp_path):
+    """A Windows-configured Git checkout must still launch on Linux/WSL."""
+    source = Path(__file__).resolve().parents[1]
+    repository = tmp_path / "repository"
+    repository.mkdir()
+    subprocess.run(["git", "init", "-q", str(repository)], check=True)
+    paths = [".gitattributes", "skills/iter-pack/scripts/bootstrap.sh",
+             "skills/iter-pack/scripts/bootstrap.py"]
+    for name in paths:
+        target = repository / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes((source / name).read_bytes())
+    subprocess.run(
+        ["git", "-C", str(repository), "-c", "core.autocrlf=true", "add", *paths],
+        check=True,
+    )
+    checkout = tmp_path / "checkout"
+    subprocess.run(
+        ["git", "-C", str(repository), "-c", "core.autocrlf=true", "checkout-index",
+         "--all", f"--prefix={checkout}/"],
+        check=True,
+    )
+    script = checkout / paths[1]
+    assert b"\r\n" not in script.read_bytes()
+    script.chmod(0o755)
+    result = subprocess.run(
+        [str(script), "--help"], capture_output=True, text=True,
+        env=os.environ | {"SIMJECTURE_BOOTSTRAP_PYTHON": sys.executable},
+        timeout=10,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "--prefix" in result.stdout
 
 
 def test_pack_installer_and_skill_are_discoverable():

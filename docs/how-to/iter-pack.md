@@ -54,6 +54,21 @@ ray sampling, geometry provenance and the distinction between measured signals
 and reconstructed profiles. In minimal studies, the registered capability works
 through the ordinary `lab.run` interface. Source packages remain readable.
 
+## Shell-script startup errors on WSL
+
+An immediate `/usr/bin/env: 'bash\r': No such file or directory` error means
+the checkout has Windows CRLF line endings. The repository stores shell scripts
+with Unix LF endings and enforces `eol=lf`, including when Git uses
+`core.autocrlf=true`. For an older or already converted checkout, repair the file
+before retrying installation:
+
+```bash
+sed -i 's/\r$//' skills/iter-pack/scripts/bootstrap.sh
+```
+
+If the error names plain `bash` without a carriage return, check that Bash is
+installed and on `PATH`; that is a different failure.
+
 ## Separate solver integrations
 
 | Tool | Workspace entry | Current qualification |

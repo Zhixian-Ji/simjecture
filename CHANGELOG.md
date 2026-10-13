@@ -4,6 +4,8 @@ This project follows semantic versioning. Dates use ISO 8601.
 
 ## Unreleased
 
+- Keep shell scripts in Unix LF format even with Windows Git checkout settings.
+  Verify that the ITER pack bootstrap launches after a `core.autocrlf=true` checkout.
 - Make experimental solver development a visible, default-on permission for new
   minimal studies. Preserve older study instructions, inherit explicit choices in
   continuations, and expose the policy through the GUI, CLI and agent drafting tools.
