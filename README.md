@@ -40,6 +40,12 @@ builds need independent, source-bound qualification before supporting a claim. T
 this off in the study brief or with `--no-allow-solver-development`; see
 [solver development and qualification](https://drawingsword.com/simjecture/how-to/minimal-oversight.html#solver-development-permission).
 
+The optional research director can stop unaffordable experiments, request a replan
+and tune remote instrument probe deadlines and retries. Operators can also delegate
+storage increases for large builds and checkpoints. The monitor shows failures,
+before/after limits and the reasons for changes; scientific acceptance and the
+campaign deadline remain separate. See [director control and recovery](https://drawingsword.com/simjecture/how-to/minimal-oversight.html#instrument-registration-recovery).
+
 Read [how the loop works](https://drawingsword.com/simjecture/concepts/research-loop.html) or
 [how evidence is checked](https://drawingsword.com/simjecture/concepts/evidence-and-claims.html).
 

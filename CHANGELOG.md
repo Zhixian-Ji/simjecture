@@ -4,6 +4,13 @@ This project follows semantic versioning. Dates use ISO 8601.
 
 ## Unreleased
 
+## 0.6.2rc2 — 2026-10-14
+
+- Keep token-usage/status inspection working for historical or partial study records
+  without storage allowances; report unknown limits without inventing admission budgets.
+- Let the research director tune remote instrument probe deadlines and retry counts.
+  Preserve the 60-second/one-attempt default, frozen identities and report reserve;
+  record actionable transport failures and show attempts and grants in the run monitor.
 - Keep shell scripts in Unix LF format even with Windows Git checkout settings.
   Verify that the ITER pack bootstrap launches after a `core.autocrlf=true` checkout.
 - Make experimental solver development a visible, default-on permission for new

@@ -185,6 +185,7 @@ class ResearchService(
                 study_id=uuid.uuid4().hex,
                 methods_required=bool(registry.hashes or remote_capabilities),
                 workflow="minimal",
+                registration_policy=dict(director_can_tune=True),
                 completion_policy=completion_policy,
                 execution_backend=execution_backend,
                 solver_development_policy=dict(
@@ -895,6 +896,7 @@ class ResearchService(
             deadline=self.manifest["deadline"],
             resource_limits=self.storage_limits(),
             resource_policy=self.resource_policy(),
+            registration=self.registration_status(),
             storage_adjustments=self._all("storage_adjustments"),
             solver_development=self.solver_development_status(compact=compact),
             completion_policy=self.manifest.get("completion_policy", "repair"),

@@ -17,6 +17,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from urllib.parse import urlsplit
 
+from .. import __version__
 from ..mvp_launch import read_process_identity
 from .deletion import ProjectDeletion
 from .lifecycle import GuestLifecycle
@@ -310,6 +311,7 @@ def create_app(root, *, dispatch=True, secure_cookies=True):
         return {
             "status": "ok",
             "service": "simjecture-public",
+            "version": __version__,
             "execution_policy": "trusted-templates",
         }
 

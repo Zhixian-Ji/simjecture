@@ -158,13 +158,18 @@ def study_status(root):
         from .research_service import ResearchService
 
         director_decisions = ResearchService(root).director_status()
-    resource_limits, resource_policy, solver_development = {}, {}, {}
+    resource_limits, resource_policy, solver_development, registration = {}, {}, {}, {}
     if mode == "minimal":
         from .research_service import ResearchService
 
         service = ResearchService(root)
-        resource_limits, resource_policy = service.storage_limits(), service.resource_policy()
+        # Read-only usage/status also supports historical or partial study manifests.
+        # Missing allowances are unknown; do not invent admission limits for these records.
+        if all(k in manifest for k in ("max_experiment_bytes", "max_total_bytes")):
+            resource_limits = service.storage_limits()
+        resource_policy = service.resource_policy()
         solver_development = service.solver_development_status()
+        registration = service.registration_status()
     from .research_finalization import report_status
 
     return dict(
@@ -174,6 +179,7 @@ def study_status(root):
         director_decisions=director_decisions,
         resource_limits=resource_limits,
         resource_policy=resource_policy,
+        registration=registration,
         solver_development=solver_development,
         director_next_review_at=state.get("director_next_review_at"),
         director_deferred_count=state.get("director_deferred_count", 0),

@@ -171,6 +171,34 @@ reservation. Neither grants nor restarts extend the campaign deadline or change 
 scientific contract. An operator may enable this for an existing dedicated study with
 `ResearchService(root).configure_resource_policy(director_can_increase=True, reason=...)`.
 
+## Instrument registration recovery
+
+Remote instrument registration probes the frozen worker and fingerprints its installed
+capabilities. A large inventory can take longer than the default **60 seconds, one attempt**.
+This is an operational deadline, not a statement about the solver's validity.
+Transport errors now distinguish a timeout from failure to start the connection.
+`lab.status()['registration']` contains current limits, delegated authority and the five
+most recent attempts, including elapsed time and error. Full records remain in
+`registration_attempts/`; they are operational records, not scientific evidence.
+
+New minimal studies permit director tuning of these probes. Use
+`--no-director-registration-tuning` to retain operator control, or explicitly delegate
+an older study with `--director-registration-tuning` on resume. An operator can also call
+`ResearchService(root).configure_registration_policy(director_can_tune=True, reason=...)`.
+Delegation is immutable once explicitly recorded. The worker cannot grant itself limits.
+
+The director can return `registration_tuning` with `timeout_seconds`, `max_attempts` and
+a concrete reason. The host records before/after settings in `registration_adjustments/`
+and wakes the worker to retry. It can increase or decrease both settings. Retries apply
+only to transport uncertainty, with short backoff; worker rejections and frozen worker,
+configuration or existing instrument identity changes still fail. Every attempt and
+backoff fits within the compute cutoff, preserving the report reserve and original
+campaign deadline. Active numerical jobs keep their settings and identities.
+
+The research monitor's **Evidence & review → Research director** section shows the
+probe limits, recent failures, and granted or rejected tuning requests. A new probe
+failure also brings the next strategy review forward instead of being hidden in chat.
+
 ## Progress recovery
 
 The host inspects observable actions and durable records after native turns. Two turns

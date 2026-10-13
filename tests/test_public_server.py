@@ -29,6 +29,14 @@ def session(app):
     return client
 
 
+def test_health_reports_the_installed_release(app):
+    from conjecture_solver import __version__
+
+    response = TestClient(app).get("/healthz")
+    assert response.status_code == 200
+    assert response.json()["version"] == __version__
+
+
 def test_visitors_cannot_read_or_cancel_other_jobs(app):
     first, second = session(app), session(app)
     job = first.post("/api/jobs", json={"mode": "reproduce"}).json()

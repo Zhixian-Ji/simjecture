@@ -100,6 +100,11 @@ class ResearchSupervisor(
         super().__init__(args)
         self.service = ResearchService(self.root)
         self.service.freeze_protocol(args.instructions_file.read_text())
+        if getattr(args, "director_registration_tuning", None) is not None:
+            self.service.configure_registration_policy(
+                director_can_tune=args.director_registration_tuning,
+                reason="Operator selected director registration tuning at campaign launch.",
+            )
         if getattr(args, "director_storage_increases", None) is not None:
             self.service.configure_resource_policy(
                 director_can_increase=args.director_storage_increases,
@@ -396,6 +401,10 @@ Write source normally here. All recorded numerical experiments use the existing 
   Existing identities cannot change; new runtime variants need new names and qualification.
   Optionally attach the structured development provenance described above. New registered
   instruments always need a source-bound production-method approval before evidence runs.
+  Remote probe deadlines/retries are reported in lab.status()['registration'], including
+  recent transport errors. Ask the director for registration_tuning when a measured
+  slow probe needs more time; do not repeat unchanged timed-out calls. Identity changes
+  or rejected requests require repair, not a longer timeout. Report reserve is protected.
 - Keep raw arrays in outputs, with a compact result.json; optionally specify
   review_documents=['result.json']. Reviewers see compact documents and raw file hashes,
   not binary contents. Use strict JSON (null plus an explicit reason for undefined values),

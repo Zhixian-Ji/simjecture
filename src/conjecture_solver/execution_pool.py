@@ -36,6 +36,10 @@ class WorkerUnavailable(RuntimeError):
     """Transport uncertainty does not establish experiment failure."""
 
 
+class WorkerTimeout(WorkerUnavailable):
+    """The request deadline expired without a confirmed response."""
+
+
 def profile_identity(profile):
     return {
         key: value
@@ -147,8 +151,15 @@ class Transport:
                 env=env,
                 start_new_session=True,
             )
-        except (OSError, subprocess.TimeoutExpired) as error:
-            raise WorkerUnavailable(f"Worker {self.machine.id} did not respond") from error
+        except subprocess.TimeoutExpired as error:
+            raise WorkerTimeout(
+                f"Worker {self.machine.id} request timed out after {timeout:g} seconds; "
+                "response unconfirmed"
+            ) from error
+        except OSError as error:
+            raise WorkerUnavailable(
+                f"Worker {self.machine.id} transport could not start (errno {error.errno})"
+            ) from error
         finally:
             if askpass_directory:
                 askpass_directory.cleanup()

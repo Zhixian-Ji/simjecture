@@ -1650,6 +1650,11 @@ function renderResearchTrace() {
     const route = engine.director_route || {};
     if (route.model) director.append(element("p", "field-help", `Director route: ${[route.backend, route.model, route.reasoning_effort].filter(Boolean).join(" · ")}`));
     if (engine.resource_limits?.max_experiment_bytes) director.append(element("p", "field-help", `Storage allowance: ${formatBytes(engine.resource_limits.max_experiment_bytes)} per experiment and file · ${formatBytes(engine.resource_limits.max_total_bytes)} shared study allowance. ${engine.resource_policy?.director_can_increase ? "Director may increase allowances with a recorded reason." : "Storage increases require operator delegation."}`));
+    const registration = engine.registration || {};
+    if (registration.limits) {
+      director.append(element("p", "field-help", `Instrument registration: ${formatDuration(registration.limits.timeout_seconds)} per probe · up to ${registration.limits.max_attempts} attempt(s). ${registration.policy?.director_can_tune ? "Director may tune deadlines and retries." : "Tuning requires operator delegation."} Compute cutoff and frozen identities remain enforced.`));
+      for (const attempt of registration.recent_attempts || []) director.append(element("p", ["responded", "verified"].includes(attempt.status) ? "field-help" : "warning-list", `${attempt.capability} on ${attempt.machine} · probe ${attempt.attempt}/${attempt.max_attempts} · ${attempt.status} · ${formatDuration(attempt.elapsed_seconds)}${attempt.error ? ` · ${attempt.error}` : ""}`));
+    }
     if (engine.director_policy?.enabled) {
       const policy = engine.director_policy;
       director.append(element("p", "field-help", `Strategy review interval: ${formatDuration(policy.interval_seconds || 300)}. Healthy experiments with unchanged work may wait up to ${formatDuration(policy.unchanged_review_seconds || policy.interval_seconds || 300)}; operational checks continue.`));
@@ -1665,6 +1670,10 @@ function renderResearchTrace() {
         const grant = d.storage_action.adjustment;
         copy.append(element("p", "field-help", `Storage increase granted: ${formatBytes(grant.before.max_experiment_bytes)} → ${formatBytes(grant.after.max_experiment_bytes)} per experiment and file; ${formatBytes(grant.before.max_total_bytes)} → ${formatBytes(grant.after.max_total_bytes)} shared study allowance. Applies to new experiments; prior reservations and deadline unchanged. Worker resumed.`), element("p", "field-help", grant.request.reason));
       } else if (d.storage_action?.status === "rejected") copy.append(element("p", "warning-list", `Storage increase rejected: ${d.storage_action.error}`));
+      if (d.registration_action?.status === "granted") {
+        const grant = d.registration_action.adjustment;
+        copy.append(element("p", "field-help", `Registration tuning granted: ${formatDuration(grant.before.timeout_seconds)} → ${formatDuration(grant.after.timeout_seconds)} per probe; ${grant.before.max_attempts} → ${grant.after.max_attempts} attempt(s). Worker resumed; compute cutoff and frozen identities unchanged.`), element("p", "field-help", grant.request.reason));
+      } else if (d.registration_action?.status === "rejected") copy.append(element("p", "warning-list", `Registration tuning rejected: ${d.registration_action.error}`));
       for (const action of d.control_actions || []) copy.append(element("p", "field-help", `Stop requested: ${action.experiment} · ${action.status} · ${action.cancellation_confirmed ? "stop confirmed" : "awaiting confirmation"}${action.error ? ` · recorded control error: ${action.error}` : ""} · partial data retained when available`));
       copy.append(element("p", "field-help", d.acknowledgement ? `Worker ${d.acknowledgement.response}: ${d.acknowledgement.reason}` : d.decision === "replan" ? "Awaiting worker plan or challenge" : "No replan acknowledgement required"));
       card.append(element("span", "event-mark", d.decision === "replan" ? "↻" : "✓"), copy);director.append(card);

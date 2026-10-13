@@ -180,6 +180,7 @@ def test_live_usage_replaces_same_turn_and_keeps_nested_review_identity(tmp_path
     )
     status = study_status(root)
     assert status["usage"]["input_tokens"] == 100
+    assert status["resource_limits"] == {}
     assert status["usage_details"]["requests"] == 1
     assert status["usage_details"]["by_role"]["reviewer"]["input_tokens"] == 100
 

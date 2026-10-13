@@ -714,6 +714,7 @@ def _engine_projection(
             director_decisions=status.get("director_decisions", []),
             resource_limits=status.get("resource_limits", {}),
             resource_policy=status.get("resource_policy", {}),
+            registration=status.get("registration", {}),
             solver_development=status.get("solver_development", {}),
             director_next_review_at=status.get("director_next_review_at"),
             director_deferred_count=status.get("director_deferred_count", 0),

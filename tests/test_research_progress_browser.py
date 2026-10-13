@@ -30,6 +30,17 @@ def test_recorded_progress_and_cost_are_visible(tmp_path, width, register_target
         ),
         director_decision="director_test",
     )
+    registration_grant = s.tune_registration(
+        dict(timeout_seconds=120, max_attempts=2,
+             reason="The full inventory scan exceeds the earlier registration timeout."),
+        director_decision="director_test",
+    )
+    (s.root / "registration_attempts").mkdir()
+    put(s.root / "registration_attempts" / "probe_test.json", dict(
+        id="probe_test", created_at=time.time(), capability="candidate", machine="gpu",
+        attempt=1, max_attempts=1, timeout_seconds=60, elapsed_seconds=60,
+        status="unavailable", error="Worker gpu request timed out after 60 seconds",
+    ))
     (s.work / "calc.py").write_text("print(1)\n")
     (s.root / "capability_additions").mkdir()
     candidate = "python-transport-repair"
@@ -134,6 +145,7 @@ def test_recorded_progress_and_cost_are_visible(tmp_path, width, register_target
             rationale="This early-time calculation cannot reach the radiation peak in budget.",
             next_action="Test a complete adaptive trajectory before refining diagnostics.",
             storage_action=dict(status="granted", adjustment=storage_grant),
+            registration_action=dict(status="granted", adjustment=registration_grant),
             control_actions=[
                 dict(
                     experiment=live_id,
@@ -203,6 +215,10 @@ def test_recorded_progress_and_cost_are_visible(tmp_path, width, register_target
                 f"/api/artifact?campaign={campaign}&path=capability_additions%2F{fingerprint(candidate)}.json",
             )
             playwright.expect(director).to_contain_text("Storage increase granted:")
+            playwright.expect(director).to_contain_text("Registration tuning granted:")
+            playwright.expect(director).to_contain_text("Director may tune deadlines and retries")
+            playwright.expect(director).to_contain_text("candidate on gpu")
+            playwright.expect(director).to_contain_text("timed out after 60 seconds")
             playwright.expect(director).to_contain_text("Director may increase allowances")
             playwright.expect(director).to_contain_text("prior reservations and deadline unchanged")
             playwright.expect(director).to_contain_text("Awaiting worker plan or challenge")

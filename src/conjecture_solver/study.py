@@ -96,6 +96,10 @@ def configure_parser(parser):
         "--director-storage-increases", action="store_true", default=None,
         help="Delegate recorded storage allowance increases to the director (minimal)",
     )
+    parser.add_argument(
+        "--director-registration-tuning", action=argparse.BooleanOptionalAction, default=None,
+        help="Delegate probe deadlines/retries to the director (new minimal studies default on)",
+    )
     parser.set_defaults(handler=run)
 
 

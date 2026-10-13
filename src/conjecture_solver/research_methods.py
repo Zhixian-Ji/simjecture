@@ -9,6 +9,7 @@ import time
 from pydantic import BaseModel, ConfigDict, Field
 
 from .mvp_skills import MVPCapabilityRegistry
+from .research_registration import RegistrationService
 
 
 def experiment_ids(values, field):
@@ -54,7 +55,7 @@ def instrument_requirement(manifest, *, capability=None, available=()):
     )
 
 
-class MethodService:
+class MethodService(RegistrationService):
     def freeze_requirements(self, requirements):
         from .research_service import put
 
@@ -94,15 +95,21 @@ class MethodService:
 
     def _remote_registration(self, name, machine):
         from .execution_pool import MachineRegistry
-        from .worker_protocol import PROTOCOL
 
         pool = self.execution_pool()
         if not pool or machine not in pool["workers"]:
             raise ValueError("Choose a frozen execution machine for capability registration")
         worker = pool["workers"][machine]
-        probe = MachineRegistry(pool["registry"]).transport(machine, frozen=worker).call(
-            "probe", timeout=60
+        return self.probe_registration(
+            MachineRegistry(pool["registry"]).transport(machine, frozen=worker),
+            name=name, machine=machine,
+            validate=lambda probe: self._validate_remote_registration(name, machine, pool, probe),
         )
+
+    def _validate_remote_registration(self, name, machine, pool, probe):
+        from .worker_protocol import PROTOCOL
+
+        worker = pool["workers"][machine]
         if probe.get("protocol") != PROTOCOL or abs(probe["clock"] - time.time()) > 30:
             raise ValueError("Worker protocol or clock differs from the frozen study")
         for key in ("worker_id", "worker_code_sha256", "config_sha256"):
@@ -165,8 +172,8 @@ class MethodService:
                 raise ValueError(
                     "Solver development is disabled: use the supplied instrument implementations"
                 )
-            if time.time() >= self.manifest["deadline"]:
-                raise ValueError("Study deadline exhausted")
+            if time.time() >= self.registration_deadline():
+                raise ValueError("Registration compute budget exhausted")
             body = dict(name=name, runtime_sha256=runtime, created_at=time.time())
             if remote:
                 body["remote_capability"] = remote

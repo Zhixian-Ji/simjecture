@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .agent_supervisor import parse_judge_stream
 from .research_development import development_guidance
+from .research_registration import RegistrationTuning
 from .research_resources import StorageIncrease
 from .research_service import fingerprint, put
 
@@ -32,6 +33,10 @@ class DirectorVerdict(BaseModel):
     storage_increase: StorageIncrease | None = Field(
         default=None,
         description="Request larger storage allowances when operator authority permits.",
+    )
+    registration_tuning: RegistrationTuning | None = Field(
+        default=None,
+        description="Tune remote registration probe timeout and retries when delegated.",
     )
 
     @model_validator(mode="after")
@@ -89,6 +94,7 @@ class ResearchDirector:
             pending_replan=self.service.pending_director_replan(),
             resource_limits=snapshot["resource_limits"],
             resource_policy=snapshot["resource_policy"],
+            registration=snapshot["registration"],
             solver_development=snapshot["solver_development"],
             first_strategy_review=not bool(previous),
             evidence_changes={
@@ -101,7 +107,7 @@ class ResearchDirector:
                 for kind, index in records.items()
             },
             record_index=records,
-            authority=("Execution strategy and delegated storage increases; "
+            authority=("Execution strategy, delegated storage increases and registration tuning; "
                        "cannot change hypothesis or approve claims"),
         )
 
@@ -123,6 +129,17 @@ experiment allowance also raises its per-file ceiling. There is no additional fi
 ceiling. Existing jobs retain their recorded reservations. Disk space and shared host capacity
 remain finite: do not grant unjustified storage or assume the allowance creates physical space.
 Without this delegated authority, report the blocker to the operator; do not request a grant.
+
+When registration.policy.director_can_tune is true, you may request registration_tuning
+with timeout_seconds, max_attempts and a reason based on registration.recent_attempts.
+A full worker probe reads and fingerprints all installed instruments; a slow probe does
+not establish a missing instrument or scientific failure. Increase the deadline when
+measured latency warrants it, or reduce retries when they waste time. Only transport
+failures are retried. Worker rejections and immutable-identity checks cannot be bypassed.
+The host records the change, wakes the worker and bounds every probe and retry by the
+compute deadline, preserving the report reserve. Registration tuning applies to future
+requests; it neither changes active jobs nor grants an unreviewed method approval.
+Do not repeat an unchanged timed-out registration without a concrete recovery action.
 
 Use an MVP research strategy: establish an affordable end-to-end trajectory through the
 scientifically relevant window before spending the campaign polishing early-time diagnostics.
@@ -197,6 +214,7 @@ retains its acknowledgement requirement; a continue wake-up adds no new approval
                 context_warning=packet["snapshot"].get("context_warning"),
                 resource_limits=packet.get("resource_limits"),
                 resource_policy=packet.get("resource_policy"),
+                registration=packet.get("registration"),
             )
         )
 
@@ -243,7 +261,10 @@ retains its acknowledgement requirement; a continue wake-up adds no new approval
         last = self.state.get("last_director_at", self.state.get("started_at", now))
         if not force and now - last < policy.get("interval_seconds", 300):
             return False
-        if not self.service._all("experiments") and self.state.get("round", 0) < 2:
+        if (
+            not self.service._all("experiments") and self.state.get("round", 0) < 2
+            and not self.service._all("registration_attempts")
+        ):
             return False
         if now < self.state.get("director_retry_after", 0) or self.state["deadline"] - now < 60:
             return False
@@ -318,6 +339,15 @@ retains its acknowledgement requirement; a continue wake-up adds no new approval
                 except (OSError, ValueError) as error:
                     record["storage_action"] = dict(status="rejected", error=str(error)[:500])
                 put(folder / (identifier + ".json"), record)
+            if verdict["registration_tuning"]:
+                try:
+                    adjustment = self.service.tune_registration(
+                        verdict["registration_tuning"], director_decision=identifier
+                    )
+                    record["registration_action"] = dict(status="granted", adjustment=adjustment)
+                except (OSError, ValueError) as error:
+                    record["registration_action"] = dict(status="rejected", error=str(error)[:500])
+                put(folder / (identifier + ".json"), record)
             for action in record["control_actions"]:
                 try:
                     stopped = self.service.cancel(
@@ -348,6 +378,7 @@ retains its acknowledgement requirement; a continue wake-up adds no new approval
             wake_worker = (
                 verdict["decision"] == "replan" or verdict["wake_worker"]
                 or record.get("storage_action", {}).get("status") == "granted"
+                or record.get("registration_action", {}).get("status") == "granted"
             )
             if wake_worker:
                 self.state["director_wake_worker"] = True
