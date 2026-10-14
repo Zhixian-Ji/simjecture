@@ -31,6 +31,8 @@ hide-toc: true
 [Understand the loop](concepts/research-loop.md) ·
 [See what counts as evidence](concepts/evidence-and-claims.md)
 
+[中文：课题组安装与开发指南](zh-cn/research-group-guide.md)
+
 ## See the process in a real record
 
 The [FLASH island-coalescence study](demos/island-coalescence.md) asks whether
@@ -147,4 +149,11 @@ development/contributing
 development/documentation
 development/releasing
 archive/index
+```
+
+```{toctree}
+:hidden:
+:caption: 中文指南
+
+zh-cn/research-group-guide
 ```

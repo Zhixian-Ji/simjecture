@@ -1,5 +1,7 @@
 # Contributing
 
+[中文操作指南：安装、Fork、开发和提交 PR](docs/zh-cn/research-group-guide.md)。
+
 Thanks for helping improve Simjecture. You can contribute without running a full
 research campaign or installing a scientific solver. Useful contributions include:
 

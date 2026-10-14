@@ -8,6 +8,8 @@
 [Research loop](https://drawingsword.com/simjecture/concepts/research-loop.html) · [Recorded studies](https://drawingsword.com/simjecture/demos/index.html) ·
 [Contributing](https://github.com/tomzhu0225/simjecture/blob/main/CONTRIBUTING.md)
 
+[中文安装、使用与开发指南](docs/zh-cn/research-group-guide.md)
+
 **Hypothesize. Simulate. Falsify.**
 
 Simjecture runs autonomous numerical investigations from a human-defined scientific
