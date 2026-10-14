@@ -1,0 +1,411 @@
+{
+  "schema_version": 1,
+  "campaign": {
+    "start_utc": "2026-10-12T03:54:46.078107+00:00",
+    "deadline_utc": "2026-10-14T03:54:46.078107+00:00",
+    "wall_hours": 48,
+    "protected_report_seconds": 600,
+    "launch_version": "0.6.2rc1",
+    "operational_patches_during_run": true,
+    "mode": "minimal",
+    "completion_policy": "repair",
+    "gpu_model": "RTX 2080 Ti",
+    "node_gpus": 8,
+    "trajectory_gpu_ranks": 6,
+    "model": "gpt-6.1-sol",
+    "worker_reasoning": "low",
+    "director_and_reviewer_reasoning": "high"
+  },
+  "outcome": {
+    "execution_status": "budget_exhausted",
+    "final_report_status": "reviewed",
+    "report_assessment": "accepted",
+    "scientific_disposition": "unresolved",
+    "accepted_claim_reviews": 0,
+    "report_hash_binding_verified": true,
+    "original_report_sha256": "ce56092271f8db4711aeb9567a6af8fbd003eb3d824e71762ba73e7148b86159",
+    "original_assessment_packet_sha256": "90115464596b288ce9ab94640ce6d53801bdfda7748de143f773ecf030ec8fcd"
+  },
+  "tokens": {
+    "input_tokens": 773246894,
+    "cached_input_tokens": 743697792,
+    "output_tokens": 1730217,
+    "reasoning_output_tokens": 435084,
+    "uncached_input_tokens": 29549102
+  },
+  "roles": {
+    "worker": {
+      "launches": 797,
+      "threads": 1,
+      "threads_without_usage": 0,
+      "tokens": {
+        "input_tokens": 657471990,
+        "cached_input_tokens": 647476480,
+        "output_tokens": 986477,
+        "reasoning_output_tokens": 270562,
+        "uncached_input_tokens": 9995510
+      }
+    },
+    "director": {
+      "launches": 452,
+      "threads": 452,
+      "threads_without_usage": 38,
+      "tokens": {
+        "input_tokens": 72410877,
+        "cached_input_tokens": 59557248,
+        "output_tokens": 610890,
+        "reasoning_output_tokens": 118506,
+        "uncached_input_tokens": 12853629
+      }
+    },
+    "reviewers": {
+      "launches": 54,
+      "threads": 54,
+      "threads_without_usage": 0,
+      "tokens": {
+        "input_tokens": 43217061,
+        "cached_input_tokens": 36578048,
+        "output_tokens": 125597,
+        "reasoning_output_tokens": 44342,
+        "uncached_input_tokens": 6639013
+      }
+    },
+    "memory": {
+      "launches": 8,
+      "threads": 8,
+      "threads_without_usage": 1,
+      "tokens": {
+        "input_tokens": 146966,
+        "cached_input_tokens": 86016,
+        "output_tokens": 7253,
+        "reasoning_output_tokens": 1674,
+        "uncached_input_tokens": 60950
+      }
+    }
+  },
+  "total_launch_records": 1311,
+  "distinct_threads": 515,
+  "worker_requests_with_counters": 2726,
+  "usage_coverage": {
+    "launches_without_completed_turn_receipt": 119,
+    "worker_launches_recovered_from_later_counters": 80,
+    "threads_without_counters": 39,
+    "worker_native_counters_match": true,
+    "worker_counter_regressions": 0,
+    "cache_write_count_exposed": false
+  },
+  "execution": {
+    "count": 488,
+    "statuses": {
+      "succeeded": 388,
+      "failed": 95,
+      "timed_out": 5
+    },
+    "purposes": {
+      "validation": 123,
+      "diagnostic": 279,
+      "unspecified": 1,
+      "debug": 82,
+      "baseline": 3
+    },
+    "stages": {
+      "exploration": 488
+    },
+    "groups": {
+      "solver_or_native_fixture": {
+        "count": 215,
+        "statuses": {
+          "succeeded": 146,
+          "failed": 65,
+          "timed_out": 4
+        },
+        "receipt_wall_sum": 80674.18628435789,
+        "receipt_active_union_seconds": 90010.91864728928
+      },
+      "analysis_and_setup": {
+        "count": 228,
+        "statuses": {
+          "succeeded": 211,
+          "failed": 16,
+          "timed_out": 1
+        },
+        "receipt_wall_sum": 692.5701319235668,
+        "receipt_active_union_seconds": 14908.957155704498
+      },
+      "build": {
+        "count": 45,
+        "statuses": {
+          "failed": 14,
+          "succeeded": 31
+        },
+        "receipt_wall_sum": 6415.201865792042,
+        "receipt_active_union_seconds": 10985.667459249496
+      }
+    },
+    "active_union_seconds": 108677.14011406898,
+    "gpu_requested_receipts": 167,
+    "gpu_requested_source_wall_hours": 22.105809244952727,
+    "requested_gpu_hours": 62.75251760164086,
+    "available_gpu_slot_hours": 384,
+    "continuous_gpu_utilization_measured": false,
+    "group_assignment": "Retained audit heuristic based on entrypoint and capability; groups include readers and fixtures, not only trajectories."
+  },
+  "oversight": {
+    "director_launches": 452,
+    "director_decisions": {
+      "continue": 373,
+      "replan": 35
+    },
+    "requested_stops": 5,
+    "stop_decisions": 3,
+    "methods_reviews": 50,
+    "methods_instrument_reviews": 49,
+    "methods_production_reviews": 1,
+    "methods_continue": 45,
+    "methods_revise": 5,
+    "director_invalid_timeout_events": 42
+  },
+  "six_hour_bins": [
+    {
+      "hours": "0-6",
+      "jobs": 73,
+      "job_statuses": {
+        "succeeded": 59,
+        "failed": 13,
+        "timed_out": 1
+      },
+      "native_or_solver_jobs": 40,
+      "worker_calls": 74,
+      "director_calls": 61
+    },
+    {
+      "hours": "6-12",
+      "jobs": 59,
+      "job_statuses": {
+        "failed": 11,
+        "succeeded": 47,
+        "timed_out": 1
+      },
+      "native_or_solver_jobs": 23,
+      "worker_calls": 44,
+      "director_calls": 57
+    },
+    {
+      "hours": "12-18",
+      "jobs": 65,
+      "job_statuses": {
+        "succeeded": 52,
+        "failed": 13
+      },
+      "native_or_solver_jobs": 27,
+      "worker_calls": 61,
+      "director_calls": 59
+    },
+    {
+      "hours": "18-24",
+      "jobs": 87,
+      "job_statuses": {
+        "failed": 21,
+        "succeeded": 66
+      },
+      "native_or_solver_jobs": 32,
+      "worker_calls": 80,
+      "director_calls": 57
+    },
+    {
+      "hours": "24-30",
+      "jobs": 73,
+      "job_statuses": {
+        "failed": 18,
+        "succeeded": 55
+      },
+      "native_or_solver_jobs": 33,
+      "worker_calls": 76,
+      "director_calls": 55
+    },
+    {
+      "hours": "30-36",
+      "jobs": 52,
+      "job_statuses": {
+        "succeeded": 42,
+        "failed": 7,
+        "timed_out": 3
+      },
+      "native_or_solver_jobs": 23,
+      "worker_calls": 66,
+      "director_calls": 51
+    },
+    {
+      "hours": "36-42",
+      "jobs": 50,
+      "job_statuses": {
+        "succeeded": 45,
+        "failed": 5
+      },
+      "native_or_solver_jobs": 22,
+      "worker_calls": 78,
+      "director_calls": 57
+    },
+    {
+      "hours": "42-48",
+      "jobs": 29,
+      "job_statuses": {
+        "failed": 7,
+        "succeeded": 22
+      },
+      "native_or_solver_jobs": 15,
+      "worker_calls": 317,
+      "director_calls": 55
+    }
+  ],
+  "worker_context": {
+    "median_request_input": 237150.5,
+    "p90_request_input": 368706,
+    "max_request_input": 453654,
+    "compactions": 18,
+    "requests_above_272k": 1055
+  },
+  "late_polling": {
+    "turns": 268,
+    "approximate_hours": 2.35,
+    "input_tokens": 96337567,
+    "legacy_progress_resets": 95,
+    "repaired_progress_resets": 2,
+    "repaired_longest_no_progress_streak": 261
+  },
+  "science": {
+    "hypothesis": "Consistent electron energy evolution, Joule heating and temperature-dependent resistivity suffice to retain plasma-bearing closed flux during inward translation and form a central merged FRC, at fixed baseline geometry and coil drive.",
+    "baseline_end_us": 20.0,
+    "thermal_end_us": 4.25,
+    "retained_field_snapshot_us": 4.2,
+    "geometry": {
+      "coordinates": "axisymmetric RZ",
+      "cells": [
+        132,
+        1472
+      ],
+      "radial_extent_m": 0.656,
+      "axial_extent_m": [
+        -4.4,
+        4.4
+      ]
+    },
+    "sustained_step_seconds_per_us": 1647,
+    "fine_step_seconds_per_us": 2940,
+    "advisory_forecast_marker_us": 30,
+    "forecast_marker_is_measured_contact_time": false,
+    "magnetic_comparison_screen_percent": 1.0,
+    "timestep_comparisons": [
+      {
+        "coarse_dt_ns": 2.5,
+        "fine_dt_ns": 1.25,
+        "B_difference_percent": 1.3781,
+        "Te_difference_percent": 0.9263,
+        "receipt": "exp_d6f181f9512ccd2d8f38dd6d"
+      },
+      {
+        "coarse_dt_ns": 1.25,
+        "fine_dt_ns": 0.625,
+        "B_difference_percent": 1.2415,
+        "Te_difference_percent": 1.4725,
+        "receipt": "exp_be3c2b5def987ef25e536d2f"
+      },
+      {
+        "coarse_dt_ns": 25,
+        "fine_dt_ns": 1.25,
+        "B_difference_percent": 5.1419,
+        "Te_difference_percent": 2.6129,
+        "receipt": "exp_88c5e69a0af65cb0fb588abd"
+      }
+    ],
+    "repeat_comparison": {
+      "dt_ns": 0.625,
+      "B_difference_percent": 0.4796,
+      "Te_difference_percent": 0.1499,
+      "axis_B_difference_percent": 2.8277,
+      "receipt": "exp_df7f1a8cc7195aa1cc360b59"
+    },
+    "local_energy_fixture": {
+      "cells": [
+        32,
+        32
+      ],
+      "duration_ns": 2,
+      "stationary_ions": true,
+      "driven_ports": false,
+      "cases": {
+        "coarse": {
+          "dt_ps": 50,
+          "native_magnetic_loss_J": 0.0006269294100000045,
+          "source_minus_native_loss_J": 1.7290286517143553e-05,
+          "source_minus_theta_dissipation_J": 3.6233855793695556e-06,
+          "ledger_unexplained_J": 1.2918364715084306e-11,
+          "applied_joule_source_J": 0.000644219696517148,
+          "incoming_boundary_contribution_J": 1.3685991549353112e-05
+        },
+        "fine": {
+          "dt_ps": 25,
+          "native_magnetic_loss_J": 0.0006281912700000086,
+          "source_minus_native_loss_J": 1.54183415754422e-05,
+          "source_minus_theta_dissipation_J": 1.8114836345482083e-06,
+          "ledger_unexplained_J": 1.0784432564634946e-11,
+          "applied_joule_source_J": 0.0006436096115754508,
+          "incoming_boundary_contribution_J": 1.3616400970832153e-05
+        }
+      },
+      "receipt": "exp_f4ab6947dafbcc4a1cfe10dd"
+    },
+    "qualification": "All numerical results remain exploratory. Local diagnostic approvals do not qualify the physical trajectory.",
+    "solver_identity": {
+      "thermal_executable_sha256": "4ea92c288d400eee60b000cd592604af30728fcd77318a5d69a62304b2d4a7e1",
+      "runtime_sha256": "59f8a8af3218e51074753fc201292cc8fdcf3e3d9c85ac9fb164529dda8ce250",
+      "electron_transport": "QDSMC",
+      "gamma": 1.6666666666666667,
+      "qualification": "Private combined solver development branch; not qualified for the root hypothesis."
+    },
+    "thermal_trajectory_receipt": "exp_5f3a7f47e38b2ddcc7a49538"
+  },
+  "api_pricing": {
+    "checked_on": "2026-10-14",
+    "model": "gpt-6.1-sol",
+    "tier": "Standard",
+    "source": "https://developers.openai.com/api/docs/models/gpt-6.1-sol",
+    "pricing_source": "https://developers.openai.com/api/docs/pricing",
+    "usd_per_million_tokens": {
+      "uncached_input": 2,
+      "cached_input": 0.1,
+      "cache_write": 2.5,
+      "output": 10,
+      "long_input_multiplier": 2,
+      "long_output_multiplier": 1.5
+    },
+    "long_context_threshold": 272000,
+    "worker_context": "Request lengths retained; apply the long-context multiplier per native request.",
+    "other_context": "Individual request lengths unavailable; calculate all-short and all-long scenarios.",
+    "cache_writes": "Native counters do not expose a separate count; calculate all uncached input at the read rate or the write rate.",
+    "exclusions": [
+      "39 threads without usage counters",
+      "Fast or Ultrafast processing",
+      "regional premiums",
+      "hosted tool fees",
+      "storage",
+      "tax",
+      "electricity"
+    ],
+    "actual_authentication": "OAuth native Codex; API prices are a comparison, not the invoice."
+  },
+  "source_summary_sha256": {
+    "audit-metrics.json": "fa1fe1a4f8cb04dd83ac03be8ebb47b566befec8748ba567183d39ecdc9162cf",
+    "audit-jobs.json": "77ac94c749e45eaa57aef6961f516f925d0dfab98c415c5bfe4489071b2469a6",
+    "native-usage.json": "a05dcdbc704a41488d776cf3876fadc849c2e6d74872a234204f1d0956ca55bf",
+    "verification.json": "636ec8f420c20d422a416cfe9ea78002d0b742f8410d45697d158de57b09bb58",
+    "repair-replay.json": "04f27a3f57f23c1bfcd4c1fbeec933445def6e9f4767abbcd03057cd110d9148"
+  },
+  "accounting_notes": [
+    "Each native thread counted once using its last reported cumulative counters.",
+    "Cached input is a subset of input; reasoning output is a subset of output.",
+    "Interrupted ephemeral reviewer calls with no receipt remain unmeasured, not zero.",
+    "Wall sums can overlap; interval union uses host receipt start/finish, including transfer/analysis overhead.",
+    "Work groups are entrypoint/capability heuristics, not scientific classifications."
+  ]
+}

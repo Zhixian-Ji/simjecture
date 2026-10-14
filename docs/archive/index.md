@@ -61,6 +61,7 @@ classic-evidence-and-claims
 Original scientific records remain intact. Read each report's qualifications and
 corrections together with the claimed result.
 
+- [48 hour FRC campaign on eight GPUs, 2026-10-14](../research/frc-48-hour-campaign-20261014.md)
 - [Run 0004 audit](../research/run-0004.md)
 - [Demo refresh and harness audit, 2026-10-08](../research/demo-audit-20261008.md)
 - [Historical next-step plan](../research/next-steps.md)

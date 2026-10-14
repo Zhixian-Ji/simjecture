@@ -35,6 +35,11 @@ hide-toc: true
 
 ## See the process in a real record
 
+The [48 hour FRC campaign on eight GPUs](research/frc-48-hour-campaign-20261014.md)
+records two days of solver development and numerical controls. It ended with the
+merger hypothesis unresolved; its public accounting includes model usage, GPU
+allocations and API pricing scenarios.
+
 The [FLASH island-coalescence study](demos/island-coalescence.md) asks whether
 one reconnection-rate scaling survives changes in resistivity and resolution.
 Follow real plasma fields, the original campaign's audit and a fresh minimal-mode
@@ -90,6 +95,7 @@ getting-started/research-workspace
 :caption: Research records
 
 demos/index
+research/campaigns
 demos/island-coalescence
 demos/flash-warpx-patch
 demos/kepler-energy

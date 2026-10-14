@@ -38,6 +38,11 @@ real state transfer and numerical controls while leaving its claim unresolved.
 The [demo refresh audit](demo-audit-20261008.md) records the observed agent errors,
 harness fixes and remaining limitations separately.
 
+The [48 hour FRC campaign on eight GPUs](frc-48-hour-campaign-20261014.md)
+preserves a longer unresolved investigation, numerical qualification failures,
+role-level token counters and cost scenarios. Its independently accepted final
+report did not approve the physical hypothesis. See [long campaign reports](campaigns.md).
+
 ## Not demonstrated
 
 - Reliable execution of arbitrary acceptable natural-language hypotheses.

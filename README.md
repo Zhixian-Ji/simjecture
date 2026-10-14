@@ -53,6 +53,11 @@ Read [how the loop works](https://drawingsword.com/simjecture/concepts/research-
 
 ## Follow a real investigation
 
+The [**48 hour FRC campaign on eight GPUs**](docs/research/frc-48-hour-campaign-20261014.md)
+ended with its merger hypothesis unresolved. Its report shows the retained plasma
+fields, numerical controls, model usage, API cost estimates and the controller
+failures exposed by two days of research. Public tables reproduce the accounting.
+
 [**Magnetic-island coalescence with FLASH**](https://drawingsword.com/simjecture/demos/island-coalescence.html)
 shows density, magnetic geometry and a current sheet evolving in a real MHD
 calculation. Follow five resistivity cases, two refinements and their evidence
