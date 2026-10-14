@@ -207,6 +207,26 @@ session, retaining the study, experiment receipts, usage accounting and original
 Repeated nonprogress receives responsive backoff and further bounded recovery.
 Private model reasoning is not examined. A distinct action is a progress signal, not
 proof of scientific progress; periodic independent review checks the latter.
+The host keeps a bounded history of useful actions across narration-only turns.
+Repeated `lab.status()`, review-status or journal polling does not reset recovery.
+Actual recorded progress is tracked separately from provisional tool activity.
+
+### Wait for feedback without spending worker turns
+
+Use a durable wait when no useful work can proceed before a result:
+
+```python
+lab.wait("Await the recorded comparison", experiments=[receipt["id"]])
+# Or methods=[...], reviews=[...], reports=[...].
+# For a genuine operator blocker:
+lab.wait("Await operator guidance on the unavailable instrument", for_operator=True)
+```
+
+End the native turn after requesting a wait. The host parks worker inference, while
+experiments, supervision and the original campaign clock continue. A terminal receipt,
+new operator steering or explicit director wake-up resumes the worker. Already settled
+receipts return their terminal state immediately. This does not complete the study or
+extend its deadline. The monitor shows the reason under **Worker awaiting feedback**.
 
 Minimal workers checkpoint at most every five minutes so one long native turn cannot
 postpone host checks indefinitely. Detached recorded experiments continue. Long builds
@@ -231,6 +251,27 @@ receipt = lab.run(
 
 If `review_documents` is omitted, compact text outputs are selected automatically.
 All artifacts retain hashes; the reviewer sees raw-file metadata, not binary contents.
+Large remote file catalogues are saved once in content-addressed `artifact_indexes/`.
+Review packets contain the index location, count and SHA-256, together with a reference
+to the unchanged full execution receipt. Large console output is explicitly excerpted;
+the original remains in that receipt. This avoids overflowing a methods packet merely
+because a numerical run generated many files.
+
+Tool-free reviewers can request a bounded inventory excerpt through `evidence_requests`:
+
+```json
+{
+  "experiment": "exp_ID",
+  "inventory": {
+    "sha256": "INDEX_SHA256_FROM_PACKET",
+    "names": ["case/fields000100/Header"]
+  }
+}
+```
+
+Use the actual 64-character index hash. Alternatively supply `offset` and `limit`
+(at most 32 entries) to page through the catalogue. Inventory requests and ordinary
+JSON-output requests are separate. A changed index or mismatched hash is rejected.
 Use strict JSON (`null` and a reason for undefined statistics), numeric arrays instead
 of pickle/object arrays, and periodic on-disk checkpoints. Non-finite JSON and explicit
 failed checks are surfaced as output findings, not silently interpreted as scientific
@@ -240,7 +281,12 @@ The host maintains `STUDY_LEDGER.md` and `research_report.json` separately from 
 notes. They distinguish execution from scientific status, list missing committed cases,
 show output findings and include supervision/usage state. Interrupted native turns
 may not return token counters; missing usage is explicitly flagged rather than counted
-as zero. Runtime estimates for unfinished
+as zero. Each native invocation saves `usage.json` with its role, thread ID, cumulative
+counters and coverage. Resumed counters replace earlier counters rather than being
+summed. A later worker counter can cover interrupted turns; an ephemeral reviewer
+with no usage remains unknown. The monitor shows missing native threads and historical
+coverage gaps. Cached input and reasoning output remain subsets of input and output.
+Provider billing is not inferred from these totals. Runtime estimates for unfinished
 validation are heuristics, not reservations or promises. `RESULTS.md` remains the worker's
 scientific narrative and should cite receipts and stay consistent with the ledger.
 
@@ -288,6 +334,40 @@ Repeated metric names mean AND. Use different names for different cases. Empty
 intersections and non-finite bounds are rejected before recording the commitment.
 This optional check validates feasibility, not the physics or the measured outcome;
 natural-language rules and scientific acceptance still require independent review.
+
+## Independent report assessment
+
+An inconclusive report can be assessed during the investigation, before the protected
+finalization reserve:
+
+```python
+request = lab.assess_report(report="RESULTS.md", reason="Assess the bounded findings and limits")
+lab.wait("Await independent report feedback", reports=[request["id"]])
+# After wake-up:
+assessment = lab.report_assessment_status(request["id"])
+```
+
+The host freezes the report and its scientific snapshot, then uses a fresh read-only
+reviewer. Exploratory, failed and inherited results retain their stages. The reviewer
+can accept an honest unresolved report or request concrete revisions. Report acceptance
+does not approve or falsify the hypothesis. An unchanged report and evidence record
+reuse their request, rather than generating repeated reviewer calls. Changed reports
+receive a new identity.
+
+The director can set `report_assessment="RESULTS.md"` to request this host action and
+`park_worker=true` to await feedback without worker inference. A prose `next_action`
+asking the host to route a report is insufficient. Parking cannot accompany a replan
+or wake-up, and cannot bypass an outstanding replan acknowledgement. New operator
+guidance remains effective while parked.
+
+In the monitor, **Evidence & review → Independent report assessments** shows requests,
+verdicts, revisions and frozen-report links. **Assess current report** queues the same
+operation for a running minimal study in an operator workspace. Read-only hosted views
+show assessment records without exposing operator controls.
+
+Scientific claim review remains separate: its dispositions are `supported`, `falsified`
+and `unresolved`. It requires claim evidence; an exploratory report belongs in
+`assess_report`, rather than a claim-review request.
 
 ## Research director: stop and replan
 

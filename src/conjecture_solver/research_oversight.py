@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import time
 from collections import Counter
 from typing import Literal
@@ -106,7 +107,10 @@ def durable_signature(service):
     return fingerprint(
         dict(
             files=files,
-            experiments=snapshot["experiments"],
+            experiments=[
+                {k: v for k, v in e.items() if k not in {"telemetry", "transport_status"}}
+                for e in snapshot["experiments"]
+            ],
             commitments=snapshot["commitments"],
             reviews=snapshot["reviews"],
             notebook=[n["id"] for n in service.notes(limit=100)["notes"]],
@@ -119,7 +123,24 @@ class ResearchOversight:
         trace = trace_summary(directory / "response.json")
         changed = durable_signature(self.service) != before
         actions = fingerprint(trace["actions"])
-        new_actions = bool(trace["actions"]) and actions != self.state.get("last_action_signature")
+        seen = self.state.get("seen_useful_actions", [])
+        useful = []
+        for action in trace["actions"]:
+            polling = re.search(
+                r"\blab\.(?:status|brief|notes|review_status|director_status|waiting_status|"
+                r"report_assessment_status)\s*\(|--call\s+['\"]?(?:status|waiting_status)\b",
+                action,
+            )
+            writes = re.search(
+                r"\blab\.(?:run|analyze|method|commit|note|assess_report|register_capability)\s*\("
+                r"|write_text\(|write_bytes\(",
+                action,
+            )
+            if not polling or writes:
+                useful.append(fingerprint(action))
+        new_actions = any(signature not in seen for signature in useful)
+        # Narration cannot erase the history and make the same poll appear new.
+        self.state["seen_useful_actions"] = list(dict.fromkeys([*seen, *useful]))[-128:]
         progressed = changed or new_actions
         self.state["last_action_signature"] = actions
         self.state["last_turn_trace"] = trace
@@ -128,13 +149,16 @@ class ResearchOversight:
         )
         if progressed:
             self.state["last_progress_at"] = time.time()
+        if changed:
+            self.state["last_recorded_progress_at"] = time.time()
         streak = self.state["no_progress_streak"]
         if streak >= 2:
             self.state["recovery_instruction"] = (
                 f"The last {streak} turns produced no new recorded work or distinct tool actions. "
                 "Do not repeat an intention. Execute the next concrete command now, or identify "
-                "an observed blocker with its command/result. Read lab.status(); "
-                "do not relaunch completed jobs."
+                "an observed blocker with its command/result. If awaiting a job or review, "
+                "call lab.wait with its receipt IDs and end the turn; unchanged status polling "
+                "is not progress. Do not relaunch completed jobs."
             )
         else:
             self.state.pop("recovery_instruction", None)
@@ -145,6 +169,8 @@ class ResearchOversight:
         self.event(
             "research_progress",
             progressed=progressed,
+            recorded_progress=changed,
+            novel_useful_activity=new_actions,
             no_progress_streak=streak,
             action_counts=trace["kinds"],
         )

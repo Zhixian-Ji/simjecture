@@ -7,6 +7,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import time
+import uuid
 from collections import Counter
 
 TOKEN_FIELDS = ("input_tokens", "output_tokens", "cached_input_tokens", "reasoning_output_tokens")
@@ -116,3 +119,29 @@ def request_accounting(path):
         cache_usage_complete=cached_missing == 0,
         reasoning_usage_complete=reasoning_missing == 0,
     )
+
+
+def invocation_accounting(state, directory, *, role, thread_id, usage, backend, returncode):
+    """Persist counter coverage without treating interrupted native calls as free."""
+    missing = state.setdefault("usage_unreported_threads", {})
+    if thread_id:
+        if usage:
+            missing.pop(thread_id, None)  # A later resumed counter covers earlier interruptions.
+        else:
+            missing[thread_id] = role
+    elif not usage:
+        state["usage_unidentified_calls"] = state.get("usage_unidentified_calls", 0) + 1
+    receipt = dict(
+        backend=backend,
+        role=role,
+        thread_id=thread_id,
+        returncode=returncode,
+        reported_at=time.time(),
+        usage=usage,
+        scope="cumulative_thread" if backend in {"codex", "codex-glm"} else "provider_requests",
+        missing_usage=not bool(usage),
+    )
+    path = directory / "usage.json"
+    temporary = path.with_name(".usage." + uuid.uuid4().hex)
+    temporary.write_text(json.dumps(receipt, allow_nan=False) + "\n")
+    os.replace(temporary, path)

@@ -153,7 +153,7 @@ def write_report(service, state):
     from .research_journal import sync_journal
     from .research_service import put
 
-    snapshot = service.status()
+    snapshot = service.status(compact=True)
     errors = []
     try:
         sync_journal(service)
@@ -258,7 +258,8 @@ def _write_navigation(service, state, snapshot):
         f"Independent claim reviews: {len(snapshot['reviews'])}.",
         f"Methods reviews: {len(snapshot['methods'])}.",
         "",
-        "See research_report.json for complete provenance, findings and review outcomes.",
+        "See research_report.json for receipt links, findings and review outcomes; "
+        "the original receipts preserve complete provenance.",
     ]
     path = service.root / "STUDY_LEDGER.md"
     temp = path.with_suffix(".tmp")

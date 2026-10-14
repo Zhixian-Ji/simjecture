@@ -67,6 +67,67 @@ def test_deepseek_native_cache_and_reasoning_are_preserved():
     assert usage["reasoning_output_tokens"] == 15
 
 
+def test_native_usage_coverage_recovers_resumed_worker_and_keeps_unknown_review(tmp_path):
+    from conjecture_solver.provider_usage import invocation_accounting
+
+    state = {"usage_by_thread": {"worker": dict(input_tokens=100, output_tokens=10)}}
+    invocation_accounting(
+        state,
+        tmp_path,
+        role="worker",
+        thread_id="worker",
+        usage=None,
+        backend="codex",
+        returncode=-15,
+    )
+    invocation_accounting(
+        state,
+        tmp_path,
+        role="director",
+        thread_id="director",
+        usage=None,
+        backend="codex",
+        returncode=-15,
+    )
+    assert state["usage_unreported_threads"] == {"worker": "worker", "director": "director"}
+    invocation_accounting(
+        state,
+        tmp_path,
+        role="worker",
+        thread_id="worker",
+        usage=dict(input_tokens=250, output_tokens=20),
+        backend="codex",
+        returncode=0,
+    )
+    assert state["usage_unreported_threads"] == {"director": "director"}
+    receipt = json.loads((tmp_path / "usage.json").read_text())
+    assert receipt["scope"] == "cumulative_thread" and receipt["usage"]["input_tokens"] == 250
+
+
+def test_status_displays_unmeasured_native_threads_as_unknown_coverage(tmp_path):
+    from conjecture_solver.research_service import ResearchService, put
+    from conjecture_solver.study_status import study_status
+
+    service = ResearchService.create(tmp_path / "study", "A native coverage fixture")
+    (service.root / "supervisor").mkdir()
+    put(
+        service.root / "supervisor/state.json",
+        dict(
+            status="initialized",
+            deadline=service.manifest["deadline"],
+            usage_by_thread={
+                "worker": dict(input_tokens=250, output_tokens=20, cached_input_tokens=200)
+            },
+            usage_roles_by_thread={"worker": "worker"},
+            usage_unreported_threads={"pending-review": "director"},
+        ),
+    )
+    status = study_status(service.root)
+    assert status["usage"]["input_tokens"] == 250
+    assert status["usage_details"]["unreported_native_threads"] == 1
+    assert status["usage_details"]["unreported_native_by_role"] == {"director": 1}
+
+
 def test_context_metadata_never_contains_message_or_reasoning_text():
     request = {
         "messages": [

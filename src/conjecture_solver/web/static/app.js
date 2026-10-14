@@ -1619,9 +1619,47 @@ function renderResearchTrace() {
     const details = engine.usage_details;
     panel.append(element("p", "field-help",
       `${details.request_count_complete === false ? "Per-request counts unavailable from native CLI" : `${details.requests || 0} tracked requests`} · ${details.requests_without_usage || 0} tracked requests without usage yet · ${formatDuration(engine.provider_wait_seconds || 0)} in provider retry waits. ${details.cost_note}`));
+    if (details.unreported_native_threads || details.unidentified_calls) panel.append(element("p", "warning-list",
+      `Reported totals are a minimum: ${details.unreported_native_threads || 0} native threads and ${details.unidentified_calls || 0} unidentified calls have unreported usage. A later cumulative worker counter can recover interrupted turns.`));
+    if (details.legacy_unmeasured_calls) panel.append(element("p", "field-help",
+      `${details.legacy_unmeasured_calls} historical calls lacked final usage receipts before coverage tracking. Their outstanding usage cannot be inferred as zero.`));
     for (const [role, totals] of Object.entries(details.by_role || {})) {
       panel.append(element("p", "field-help", `${role}: ${compactNumber(totals.input_tokens)} input / ${totals.cache_usage_complete === false ? "unknown" : compactNumber(totals.cached_input_tokens)} cached / ${totals.uncached_input_tokens == null ? "unknown" : compactNumber(totals.uncached_input_tokens)} uncached / ${compactNumber(totals.output_tokens)} output tokens`));
     }
+  }
+  if (engine.worker_wait?.status === "waiting" && engine.status === "running") {
+    const waiting = element("section", "research-waiting");
+    waiting.append(element("h3", null, "Worker awaiting feedback"),
+      element("p", null, engine.worker_wait.reason),
+      element("p", "field-help", "Worker inference is parked. Experiments and host supervision continue; the original campaign deadline remains in force. New review results or operator guidance wake the worker."));
+    panel.append(waiting);
+  }
+  if (engine.mode === "minimal" || engine.report_assessments?.length) {
+    const reports = element("section", "report-assessments");
+    reports.append(element("h3", null, "Independent report assessments"),
+      element("p", "field-help", "Reports can be reviewed while the investigation runs, including inconclusive findings. Report acceptance does not approve the hypothesis or promote exploratory evidence."));
+    for (const request of (engine.report_assessments || []).slice(-5)) {
+      const label = request.assessment?.decision || request.status;
+      reports.append(element("strong", null, `Report ${label.replaceAll("_", " ")} · frozen version`));
+      if (request.assessment?.summary) reports.append(element("p", null, request.assessment.summary));
+      for (const issue of request.assessment?.issues || []) reports.append(element("p", "warning-list", issue));
+      if (request.error) reports.append(element("p", "warning-list", request.error));
+      const link = element("a", null, "Open frozen report");
+      link.href = artifactUrl(request.report); link.target = "_blank"; link.rel = "noopener";
+      reports.append(link);
+    }
+    if (state.allowMutations && state.snapshot.controls?.can_assess_report) {
+      const button = element("button", "quiet", "Assess current report");
+      button.type = "button";
+      button.disabled = (engine.report_assessments || []).some(r => ["queued", "running"].includes(r.status));
+      button.addEventListener("click", async () => {
+        button.disabled = true;
+        await controlCampaign("assess-report");
+        button.disabled = false;
+      });
+      reports.append(button);
+    }
+    panel.append(reports);
   }
   if (engine.instrument_requirement?.prefixes?.length) {
     const rule = engine.instrument_requirement;
@@ -1666,6 +1704,10 @@ function renderResearchTrace() {
       copy.append(element("strong", null, `${d.decision === "replan" ? "Stop / replan" : "Continue strategy"} · budget ${d.budget_feasibility} · science ${d.scientific_feasibility}`),
         element("p", null, d.rationale), element("p", null, `Next action: ${d.next_action}`));
       if (d.wake_worker) copy.append(element("p", "field-help", "Worker wake-up requested · prepare or analyze work while experiments continue."));
+      if (d.worker_wait_action?.status === "parked") copy.append(element("p", "field-help", "Worker parked until feedback · campaign clock and experiments continue."));
+      if (d.worker_wait_action?.status === "rejected") copy.append(element("p", "warning-list", `Worker wait rejected: ${d.worker_wait_action.error}`));
+      if (d.report_assessment_action?.request) copy.append(element("p", "field-help", `Independent report assessment requested: ${d.report_assessment_action.request.id}`));
+      if (d.report_assessment_action?.status === "rejected") copy.append(element("p", "warning-list", `Report assessment rejected: ${d.report_assessment_action.error}`));
       if (d.storage_action?.status === "granted") {
         const grant = d.storage_action.adjustment;
         copy.append(element("p", "field-help", `Storage increase granted: ${formatBytes(grant.before.max_experiment_bytes)} → ${formatBytes(grant.after.max_experiment_bytes)} per experiment and file; ${formatBytes(grant.before.max_total_bytes)} → ${formatBytes(grant.after.max_total_bytes)} shared study allowance. Applies to new experiments; prior reservations and deadline unchanged. Worker resumed.`), element("p", "field-help", grant.request.reason));

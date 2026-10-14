@@ -167,6 +167,12 @@ class AgentSupervisor:
             )
             self.save()
         self.state.setdefault("run_id", uuid.uuid4().hex[:12])
+        if "usage_unreported_threads" not in self.state:
+            self.state["usage_legacy_unmeasured_calls"] = self.state.get(
+                "usage_incomplete_turns", 0
+            )
+            self.state["usage_unreported_threads"] = {}
+            self.state["usage_coverage_since"] = time.time()
         self.state.update(
             backend=getattr(args, "backend", "agy"), model=getattr(args, "model", "unknown")
         )
@@ -468,10 +474,13 @@ class AgentSupervisor:
                 if turn_timed_out:
                     self.event(
                         "worker_turn_timeout",
-                        duration_seconds=duration,
+                        duration_seconds=time.monotonic() - provider_started,
+                        allowance_seconds=duration,
                         reason=(
                             "review_handoff"
                             if handoff
+                            else "absolute_call_boundary"
+                            if call_expired
                             else "host_checkpoint"
                             if time.monotonic() >= slice_limit
                             else "inactivity"
@@ -523,6 +532,28 @@ class AgentSupervisor:
                         )
                         self.state.setdefault("usage_roles_by_thread", {})[thread_id] = role
                         self.state["usage_updated_at"] = time.time()
+                    from .provider_usage import invocation_accounting
+
+                    role = (
+                        "memory"
+                        if directory.name.startswith("journal-summary-")
+                        else "director"
+                        if directory.name.startswith("director-")
+                        else "report_reviewer"
+                        if directory.name.startswith("judge-report-")
+                        else "reviewer"
+                        if judge
+                        else "worker"
+                    )
+                    invocation_accounting(
+                        self.state,
+                        directory,
+                        role=role,
+                        thread_id=thread_id,
+                        usage=usage,
+                        backend=backend,
+                        returncode=child.returncode,
+                    )
                 elif (
                     backend in {"grok", "agy"}
                     and getattr(self.args, "interactive_activity", False)
@@ -554,6 +585,16 @@ class AgentSupervisor:
                         usage_key = directory.relative_to(self.directory).as_posix()
                         self.state.setdefault("usage_by_thread", {})[usage_key] = usage
                         self.state["usage_updated_at"] = time.time()
+                        role = (
+                            "director"
+                            if directory.name.startswith("director-")
+                            else "memory"
+                            if directory.name.startswith("journal-summary-")
+                            else "reviewer"
+                            if judge
+                            else "worker"
+                        )
+                        self.state.setdefault("usage_roles_by_thread", {})[usage_key] = role
                     if usage is None or usage.get("requests_without_usage", 0):
                         self.state["usage_incomplete_turns"] = (
                             self.state.get("usage_incomplete_turns", 0) + 1

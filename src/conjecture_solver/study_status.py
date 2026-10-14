@@ -70,6 +70,13 @@ def study_status(root):
     activity = state.get("activity", "Starting backend")
     if state.get("waiting_for"):
         activity = "Running numerical experiments"
+    worker_wait = {}
+    if mode == "minimal" and (root / "worker_wait.json").exists():
+        from .research_service import ResearchService
+
+        worker_wait = ResearchService(root).waiting_status()
+        if worker_wait.get("status") == "waiting":
+            activity = "Waiting for feedback · " + worker_wait["reason"]
     if status != "running":
         activity = status.replace("_", " ")
         if status == "paused_external_error" and state.get("last_error"):
@@ -81,7 +88,11 @@ def study_status(root):
             f"Reconnecting provider (attempt {state.get('provider_retry_count', 0)}, "
             f"{max(0, state['provider_next_retry_at'] - now):.0f}s to retry)"
         )
-    if status == "running" and state.get("no_progress_streak", 0) >= 2:
+    if (
+        status == "running"
+        and worker_wait.get("status") != "waiting"
+        and state.get("no_progress_streak", 0) >= 2
+    ):
         activity += f" · {state['no_progress_streak']} turns without observed progress"
     by_thread = dict(state.get("usage_by_thread", {}))
     if state.get("active_usage_directory") and status == "running":
@@ -141,6 +152,15 @@ def study_status(root):
         ),
         cost_status="unavailable",
         cost_note="Provider billing and cache pricing are not inferred from token totals.",
+        unreported_native_threads=len(state.get("usage_unreported_threads", {}))
+        if "usage_unreported_threads" in state
+        else None,
+        unreported_native_by_role=dict(Counter(state.get("usage_unreported_threads", {}).values())),
+        unidentified_calls=state.get("usage_unidentified_calls", 0),
+        legacy_unmeasured_calls=state.get("usage_legacy_unmeasured_calls", 0)
+        if "usage_unreported_threads" in state
+        else state.get("usage_incomplete_turns", 0),
+        coverage_since=state.get("usage_coverage_since"),
     )
     available = set(manifest.get("capability_hashes", {}))
     available.update(
@@ -163,6 +183,7 @@ def study_status(root):
         from .research_service import ResearchService
 
         service = ResearchService(root)
+        service.reconcile_report_assessments()
         # Read-only usage/status also supports historical or partial study manifests.
         # Missing allowances are unknown; do not invent admission limits for these records.
         if all(k in manifest for k in ("max_experiment_bytes", "max_total_bytes")):
@@ -174,6 +195,8 @@ def study_status(root):
 
     return dict(
         finalization=report_status(root, manifest),
+        report_assessments=[read(p) for p in sorted((root / "report_requests").glob("*.json"))],
+        worker_wait=worker_wait,
         director_policy=manifest.get("director_policy", {"enabled": False}),
         director_route=state.get("reviewer_route", {}),
         director_decisions=director_decisions,

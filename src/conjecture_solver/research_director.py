@@ -29,6 +29,15 @@ class DirectorVerdict(BaseModel):
             "without stopping those experiments or requiring a strategy change."
         ),
     )
+    park_worker: bool = Field(
+        default=False,
+        description="Wait without inference until work, review or operator feedback arrives.",
+    )
+    report_assessment: str | None = Field(
+        default=None,
+        max_length=512,
+        description="Report path for independent assessment now; never approves a claim.",
+    )
     next_action: str = Field(min_length=16, max_length=2400)
     storage_increase: StorageIncrease | None = Field(
         default=None,
@@ -45,6 +54,8 @@ class DirectorVerdict(BaseModel):
             raise ValueError("Stopping an experiment requires decision=replan")
         if len(set(self.stop_experiments)) != len(self.stop_experiments):
             raise ValueError("Stop IDs must be distinct")
+        if self.park_worker and (self.wake_worker or self.decision == "replan"):
+            raise ValueError("Parking cannot also wake the worker or require a replan response")
         return self
 
 
@@ -56,7 +67,14 @@ class ResearchDirector:
         active = []
         records = {
             kind: {r["id"]: r.get("status") for r in self.service._all(kind)}
-            for kind in ("experiments", "notebook", "methods", "reviews", "progress")
+            for kind in (
+                "experiments",
+                "notebook",
+                "methods",
+                "reviews",
+                "progress",
+                "report_requests",
+            )
         }
         previous = self.state.get("director_seen_records", {})
         now = time.time()
@@ -90,6 +108,8 @@ class ResearchDirector:
             snapshot=self.context_brief(max_bytes=8000),
             active_experiments=active,
             worker_waiting_for=list(self.state.get("waiting_for", [])),
+            worker_wait=snapshot.get("worker_wait", {}),
+            report_assessments=snapshot.get("report_assessments", []),
             previous_decisions=self.service.director_status()[:2],
             pending_replan=self.service.pending_director_replan(),
             resource_limits=snapshot["resource_limits"],
@@ -107,8 +127,10 @@ class ResearchDirector:
                 for kind, index in records.items()
             },
             record_index=records,
-            authority=("Execution strategy, delegated storage increases and registration tuning; "
-                       "cannot change hypothesis or approve claims"),
+            authority=(
+                "Execution strategy, delegated storage increases and registration tuning; "
+                "cannot change hypothesis or approve claims"
+            ),
         )
 
     def director_prompt(self, packet):
@@ -182,6 +204,15 @@ proceed now, such as submitting completed qualification for review or analyzing 
 outputs while a simulation continues. Keep useful experiments running. Do not wake the
 worker merely to poll, restate limitations or wait again. A replan always wakes it and
 retains its acknowledgement requirement; a continue wake-up adds no new approval gate.
+For an honest inconclusive report ready for assessment, set report_assessment to its
+research-relative path, usually RESULTS.md. The host queues a fresh independent report
+review now; it does not approve the hypothesis or change exploratory evidence stages.
+Do not merely ask for host routing in next_action prose. Set park_worker=true with a
+concrete waiting reason when no useful worker action can proceed before feedback.
+The campaign clock, active experiments and supervision continue. A replan, explicit
+wake-up or new operator guidance resumes the worker. Parking cannot accompany a replan
+or a wake-up. Validate a claimed API blocker against the actual error and allowed values;
+claim review accepts unresolved, while exploratory reports use report assessment.
 """
             + development_guidance(packet["solver_development"]["policy"])
             + "\nSCHEMA:\n"
@@ -215,6 +246,7 @@ retains its acknowledgement requirement; a continue wake-up adds no new approval
                 resource_limits=packet.get("resource_limits"),
                 resource_policy=packet.get("resource_policy"),
                 registration=packet.get("registration"),
+                worker_wait=packet.get("worker_wait"),
             )
         )
 
@@ -224,14 +256,21 @@ retains its acknowledgement requirement; a continue wake-up adds no new approval
         # Pre-existing studies retain their recorded cadence.
         maximum = policy.get("unchanged_review_seconds", interval)
         previous = self.state.get("director_feedback", {})
+        parked_idle = (
+            not packet["active_experiments"]
+            and packet.get("worker_wait", {}).get("status") == "waiting"
+        )
         if (
             now - last >= maximum
             or self.state.get("director_strategy_signature") != signature
             or previous.get("decision") != "continue"
-            or previous.get("budget_feasibility") != "feasible"
+            or (previous.get("budget_feasibility") != "feasible" and not parked_idle)
             or packet["pending_replan"]
             or packet["remaining_seconds"] <= maximum
-            or not packet["active_experiments"]
+            or (
+                not packet["active_experiments"]
+                and packet.get("worker_wait", {}).get("status") != "waiting"
+            )
         ):
             return False
         for r in packet["active_experiments"]:
@@ -262,8 +301,10 @@ retains its acknowledgement requirement; a continue wake-up adds no new approval
         if not force and now - last < policy.get("interval_seconds", 300):
             return False
         if (
-            not self.service._all("experiments") and self.state.get("round", 0) < 2
+            not self.service._all("experiments")
+            and self.state.get("round", 0) < 2
             and not self.service._all("registration_attempts")
+            and not (self.service.work / "RESULTS.md").is_file()
         ):
             return False
         if now < self.state.get("director_retry_after", 0) or self.state["deadline"] - now < 60:
@@ -330,6 +371,18 @@ retains its acknowledgement requirement; a continue wake-up adds no new approval
                 **verdict,
             )
             put(folder / (identifier + ".json"), record)
+            if verdict["report_assessment"]:
+                try:
+                    request = self.service.assess_report(
+                        verdict["report_assessment"], reason=verdict["rationale"][:2400]
+                    )
+                    record["report_assessment_action"] = dict(status="queued", request=request)
+                except (OSError, ValueError) as error:
+                    record["report_assessment_action"] = dict(
+                        status="rejected", error=str(error)[:500]
+                    )
+                    self.state["director_wake_worker"] = True
+                put(folder / (identifier + ".json"), record)
             if verdict["storage_increase"]:
                 try:
                     adjustment = self.service.increase_storage(
@@ -376,12 +429,40 @@ retains its acknowledgement requirement; a continue wake-up adds no new approval
                 director_seen_records=packet["record_index"],
             )
             wake_worker = (
-                verdict["decision"] == "replan" or verdict["wake_worker"]
+                verdict["decision"] == "replan"
+                or verdict["wake_worker"]
                 or record.get("storage_action", {}).get("status") == "granted"
                 or record.get("registration_action", {}).get("status") == "granted"
             )
             if wake_worker:
                 self.state["director_wake_worker"] = True
+            if verdict["park_worker"]:
+                try:
+                    if self.service.pending_director_replan() or wake_worker:
+                        raise ValueError(
+                            "Resolve the pending replan or granted recovery before parking"
+                        )
+                    wait = self.service.wait(
+                        verdict["next_action"],
+                        experiments=[r["id"] for r in packet["active_experiments"]],
+                        reports=[
+                            r["id"]
+                            for r in self.service._all("report_requests")
+                            if r["status"] in {"queued", "running"}
+                        ],
+                        reviews=[
+                            r["id"] for r in self.service._all("reviews") if r["status"] == "queued"
+                        ],
+                        methods=[
+                            r["id"] for r in self.service._all("methods") if r["status"] == "queued"
+                        ],
+                        for_operator=True,
+                    )
+                    record["worker_wait_action"] = dict(status="parked", wait=wait)
+                except (OSError, ValueError) as error:
+                    record["worker_wait_action"] = dict(status="rejected", error=str(error)[:500])
+                put(folder / (identifier + ".json"), record)
+                put(d / "verdict.json", record)
             self.event("research_director", decision=identifier, verdict=verdict)
             self.save()
             return wake_worker

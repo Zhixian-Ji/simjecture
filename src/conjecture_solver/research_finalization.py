@@ -121,29 +121,7 @@ class ResearchFinalization:
             self.launch_deadline = previous
 
     def _report_packet(self):
-        from .research_service import fingerprint, put
-
-        path = self.service.work / "RESULTS.md"
-        if not path.is_file() or path.stat().st_size > 512 * 1024 or not path.read_text().strip():
-            raise ValueError("Write a nonempty research/RESULTS.md of at most 512 KiB")
-        body = path.read_bytes()
-        snapshot = self.service.status(compact=True)
-        packet = dict(
-            original_hypothesis=self.service.manifest["hypothesis"],
-            operator_protocol=self.service.manifest.get("operator_protocol"),
-            study_root=str(self.root),
-            scientific_snapshot=snapshot,
-            continuation=self.service.manifest.get("continuation", {}),
-            report=body.decode(),
-            report_sha256=hashlib.sha256(body).hexdigest(),
-            scope="Report assessment only; does not approve claims or change evidence stages.",
-        )
-        identifier = fingerprint(packet)
-        directory = self.root / "report_reviews" / identifier
-        directory.mkdir(parents=True, exist_ok=True)
-        (directory / "RESULTS.md").write_bytes(body)
-        put(directory / "packet.json", packet)
-        return directory, packet
+        return self.service.freeze_report("RESULTS.md")
 
     def _draft_report(self, prompt, seconds):
         """Harvest asynchronous analysis and wake its author within one draft allowance."""
@@ -191,13 +169,8 @@ class ResearchFinalization:
                 "their original evidence stages. Do not launch new simulations or change the claim."
             )
 
-    def _assess_report(self, seconds):
-        from .agent_supervisor import parse_judge_stream
-        from .research_service import put
-
-        self._finish_state(phase="independent report review")
-        frozen, packet = self._report_packet()
-        prompt = (
+    def _report_review_prompt(self, frozen, seconds):
+        return (
             "Independently assess this scientific REPORT, not a claim-approval request. "
             "Use read-only tools to inspect referenced original sources, receipts, "
             "figures and data. "
@@ -230,6 +203,14 @@ class ResearchFinalization:
             + "\nStudy root: "
             + str(self.root)
         )
+
+    def _assess_report(self, seconds):
+        from .agent_supervisor import parse_judge_stream
+        from .research_service import put
+
+        self._finish_state(phase="independent report review")
+        frozen, packet = self._report_packet()
+        prompt = self._report_review_prompt(frozen, seconds)
         directory, rc = self._finish_call("review", prompt, seconds, judge=True)
         if rc:
             raise ValueError(f"Report reviewer exited with {rc}; report remains unreviewed")
@@ -241,6 +222,23 @@ class ResearchFinalization:
         if _sha(frozen / "RESULTS.md") != packet["report_sha256"]:
             raise ValueError("Report changed during assessment")
         put(frozen / "assessment.json", verdict.model_dump(mode="json"))
+        # A worker may queue this same frozen report while drafting. The final
+        # assessor fulfils that request; do not leave a false pending review.
+        for request in self.service._all("report_requests"):
+            if (
+                request["status"] in {"queued", "running", "failed", "deferred"}
+                and request["report_sha256"] == packet["report_sha256"]
+                and request["packet_sha256"] == _sha(frozen / "packet.json")
+            ):
+                if request.get("error"):
+                    request.setdefault("previous_errors", []).append(request.pop("error"))
+                request.update(
+                    status="resolved",
+                    assessment=verdict.model_dump(mode="json"),
+                    resolved_at=time.time(),
+                    reviewed_during_finalization=True,
+                )
+                put(self.root / "report_requests" / (request["id"] + ".json"), request)
         self._finish_state(
             report_status="reviewed" if verdict.decision == "accepted" else "needs_revision",
             assessment=verdict.model_dump(mode="json"),
@@ -250,6 +248,76 @@ class ResearchFinalization:
             packet_sha256=_sha(frozen / "packet.json"),
         )
         return verdict
+
+    def process_report_requests(self):
+        """Process explicit assessments during research without closing the claim."""
+        from .agent_supervisor import parse_judge_stream
+        from .provider_retry import ProviderFailure
+        from .research_service import put
+
+        requests = sorted(self.service._all("report_requests"), key=lambda r: r["created_at"])
+        for request in requests:
+            if request["status"] not in {"queued", "running"} or self.boundary():
+                continue
+            cutoff = self.service.manifest.get("finalization_policy", {}).get(
+                "compute_deadline", self.state["deadline"]
+            )
+            seconds = min(180, cutoff - time.time() - 3)
+            if seconds < 5:
+                return
+            record_path = self.root / "report_requests" / (request["id"] + ".json")
+            try:
+                request = self.service.report_assessment_status(request["id"])
+                request.update(status="running", attempts=request.get("attempts", 0) + 1)
+                put(record_path, request)
+                directory = (
+                    self.directory / f"judge-report-request-{request['id']}-{request['attempts']}"
+                )
+                directory.mkdir()
+                frozen = (self.root / request["packet"]).parent
+                previous = getattr(self, "launch_deadline", None)
+                self.launch_deadline = min(cutoff, time.time() + seconds)
+                try:
+                    rc = self.launch(
+                        directory, self._report_review_prompt(frozen, seconds), judge=True
+                    )
+                finally:
+                    self.launch_deadline = previous
+                boundary = self.boundary()
+                if boundary:
+                    request.update(
+                        status="queued" if boundary == "paused" else "deferred",
+                        error="Report assessment interrupted by " + boundary,
+                    )
+                    put(record_path, request)
+                    return
+                if rc:
+                    raise ValueError(
+                        f"Report reviewer exited with {rc}; assessment remains unreviewed"
+                    )
+                verdict = ReportAssessment.model_validate(
+                    parse_judge_stream(
+                        directory / "response.json", self.args.backend, allow_readonly_tools=True
+                    )
+                )
+                self.service.report_assessment_status(request["id"])
+                request.update(
+                    status="resolved",
+                    assessment=verdict.model_dump(mode="json"),
+                    resolved_at=time.time(),
+                )
+                put(frozen / "assessment.json", verdict.model_dump(mode="json"))
+                self.event(
+                    "report_assessment", id=request["id"], verdict=verdict.model_dump(mode="json")
+                )
+            except ProviderFailure:
+                request["status"] = "queued"
+                put(record_path, request)
+                raise
+            except (OSError, ValueError, RuntimeError) as error:
+                request.update(status="failed", error=str(error)[:1000], resolved_at=time.time())
+                self.event("report_assessment_failed", id=request["id"], error=str(error))
+            put(record_path, request)
 
     def finalize_report(self):
         """One bounded draft/review/revision cycle; never extends the study deadline."""
@@ -329,5 +397,16 @@ class ResearchFinalization:
             self.event("report_finalization_incomplete", error=str(error))
         finally:
             self.service.cancel_active()
+            from .research_service import put
+
+            for request in self.service._all("report_requests"):
+                if request["status"] in {"queued", "running"}:
+                    request.update(
+                        status="deferred",
+                        error="Protected report review ended before this "
+                        "separate report could be assessed; no acceptance is inferred.",
+                        resolved_at=time.time(),
+                    )
+                    put(self.root / "report_requests" / (request["id"] + ".json"), request)
             self._finish_state(phase="finished", finished_at=time.time())
             self._finalizing = False

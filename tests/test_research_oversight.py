@@ -170,6 +170,36 @@ def test_private_reasoning_excluded_from_observer(tmp_path):
     assert "PRIVATE" not in json.dumps(trace_summary(p))
 
 
+def test_polling_after_narration_cannot_reset_progress(tmp_path):
+    service, supervisor = make(tmp_path)
+    for index in range(9):
+        directory = supervisor.directory / f"poll-{index}"
+        directory.mkdir()
+        transcript(
+            directory / "response.json",
+            text="Await the same review.",
+            command="python -c 'from lab import lab; print(lab.status())'"
+            if index % 3 == 0
+            else None,
+        )
+        supervisor.observe_turn(directory, durable_signature(service))
+        assert supervisor.state["no_progress_streak"] == index + 1
+    assert supervisor.state["session_recoveries"] == 2
+
+
+def test_useful_action_history_survives_narration(tmp_path):
+    service, supervisor = make(tmp_path)
+    directory = supervisor.directory / "action"
+    directory.mkdir()
+    transcript(directory / "response.json", command="python inspect_source.py")
+    supervisor.observe_turn(directory, durable_signature(service))
+    transcript(directory / "response.json")
+    supervisor.observe_turn(directory, durable_signature(service))
+    transcript(directory / "response.json", command="python inspect_source.py")
+    supervisor.observe_turn(directory, durable_signature(service))
+    assert supervisor.state["no_progress_streak"] == 2
+
+
 def test_methods_gate_requires_approval_and_invalidates_changed_source(tmp_path, monkeypatch):
     s, sup = make(tmp_path, required=True)
     with pytest.raises(ValueError, match="Submit lab.method"):

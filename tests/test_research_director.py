@@ -320,6 +320,59 @@ def test_continue_without_wakeup_leaves_worker_parked(tmp_path, monkeypatch):
     assert not sup.service._read("experiments", r["id"]).get("cancel_requested")
 
 
+def test_director_routes_report_and_parks_worker_without_closing_claim(tmp_path, monkeypatch):
+    sup = supervisor(tmp_path)
+    (sup.service.work / "RESULTS.md").write_text("Unresolved; inspect the retained failed control.")
+    result = dict(
+        decision="continue",
+        rationale="The bounded report is ready for independent assessment.",
+        scientific_feasibility="limited",
+        budget_feasibility="feasible",
+        stop_experiments=[],
+        park_worker=True,
+        report_assessment="RESULTS.md",
+        next_action="Await independent assessment of the retained report before resuming work.",
+    )
+
+    def launch(directory, prompt, **kwargs):
+        (directory / "response.json").write_text(
+            json.dumps(
+                dict(
+                    type="item.completed", item=dict(type="agent_message", text=json.dumps(result))
+                )
+            )
+            + "\n"
+            + json.dumps(dict(type="turn.completed", usage={}))
+            + "\n"
+        )
+        return 0
+
+    monkeypatch.setattr(sup, "launch", launch)
+    sup.run_director(force=True)
+    decision = sup.service.director_status()[0]
+    assert decision["report_assessment_action"]["request"]["status"] == "queued"
+    assert decision["worker_wait_action"]["status"] == "parked"
+    assert sup.service.waiting_status()["status"] == "waiting"
+    assert not sup.service.status()["completed"] and not sup.service.status()["reviews"]
+
+
+def test_director_cannot_park_and_wake_or_replan_simultaneously():
+    for extras in [dict(wake_worker=True), dict(decision="replan")]:
+        value = (
+            dict(
+                decision="continue",
+                rationale="A concrete reason to wait for review feedback.",
+                scientific_feasibility="limited",
+                budget_feasibility="feasible",
+                next_action="Await independent report review while the campaign clock runs.",
+                park_worker=True,
+            )
+            | extras
+        )
+        with pytest.raises(ValueError, match="Parking"):
+            DirectorVerdict(**value)
+
+
 def test_flash_live_timing_is_not_claim_evidence(tmp_path):
     (tmp_path / "execution.log").write_text("1 2.0000E-12 2.0000E-12 ( 0, 0, 0 ) | 1e-10\n")
     m = {"path": "execution.log", "format": "flash", "target": 20.0, "unit": "ns"}

@@ -58,6 +58,7 @@ VISIBLE_RECORDS = frozenset(
         "research.json",
         "research_report.json",
         "finalization.json",
+        "worker_wait.json",
         "study-mode.json",
         "RESULTS_INDEX.md",
         "STUDY_LEDGER.md",
@@ -381,7 +382,8 @@ class SimjectureWebApplication:
                     model=payload.get("model") or None,
                     judge_model=payload.get("judge_model") or None,
                     allow_solver_development=payload.get("allow_solver_development", True)
-                    if mode == "minimal" else None,
+                    if mode == "minimal"
+                    else None,
                 )
             )
             request = factory(
@@ -443,6 +445,23 @@ class SimjectureWebApplication:
     def control(self, token: str, action: str) -> dict[str, Any]:
         self._require_mutations()
         root = self.registry.resolve(token)
+        if action == "assess-report":
+            from ..research_service import ResearchService
+
+            if not (root / "research.json").is_file() or not _is_live(root):
+                raise WebApplicationError(
+                    "Report assessment requires a running minimal study", status=409
+                )
+            try:
+                request = ResearchService(root).assess_report(
+                    reason="Operator requested report assessment in the monitor"
+                )
+            except (OSError, ValueError) as error:
+                raise WebApplicationError(str(error), status=409) from error
+            return {
+                "message": "Independent report assessment " + request["status"],
+                "request": request,
+            }
         if action == "pause":
             message = request_verified_pause(root, source="web")
             if not message.startswith("pause requested"):
@@ -709,6 +728,8 @@ def _engine_projection(
             instrument_requirement=status["instrument_requirement"],
             receipt_progress=status.get("receipt_progress", []),
             finalization=status.get("finalization", {}),
+            report_assessments=status.get("report_assessments", []),
+            worker_wait=status.get("worker_wait", {}),
             director_policy=status.get("director_policy", {}),
             director_route=status.get("director_route", {}),
             director_decisions=status.get("director_decisions", []),
@@ -897,6 +918,8 @@ def _artifact_index(root: Path, *, raw_claims: list[dict[str, Any]]) -> list[dic
                     "commitments/",
                     "reviews/",
                     "report_reviews/",
+                    "report_requests/",
+                    "artifact_indexes/",
                 )
             )
             or relative in VISIBLE_RECORDS
@@ -982,6 +1005,9 @@ def _control_capabilities(root: Path, *, phase: RunPhase, live: bool) -> dict[st
         "can_pause": live and phase is not RunPhase.PAUSED,
         "can_resume": not live and not terminal and launch,
         "can_cancel": live,
+        "can_assess_report": live
+        and (root / "research.json").is_file()
+        and (root / "research/RESULTS.md").is_file(),
         "read_only_reason": None,
     }
 
@@ -1022,6 +1048,9 @@ def _revision(snapshot: Any, *, root: Path, live: bool) -> str:
         "mvp_report.json",
         "research_report.json",
         "supervisor/state.json",
+        "worker_wait.json",
+        "finalization.json",
+        "report_requests",
         "operator_input/control.json",
         "operator_input/dsh_activity.jsonl",
         "operator_input/dsh_state.json",

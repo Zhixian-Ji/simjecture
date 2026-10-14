@@ -5,10 +5,11 @@ from __future__ import annotations
 import hashlib
 import json
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .evidence_paths import evidence_value
 from .research_audit import strict_json
+from .research_receipts import InventorySelection, selected_inventory
 
 
 class EvidenceRequest(BaseModel):
@@ -16,6 +17,13 @@ class EvidenceRequest(BaseModel):
     experiment: str = Field(pattern=r"^exp_[A-Za-z0-9_-]+$", max_length=100)
     output: str | None = Field(default=None, max_length=256)
     path: str | None = Field(default=None, max_length=1024)
+    inventory: InventorySelection | None = None
+
+    @model_validator(mode="after")
+    def separate_inventory_and_output(self):
+        if self.inventory is not None and (self.output is not None or self.path is not None):
+            raise ValueError("Request an inventory excerpt or an output value, not both")
+        return self
 
 
 def fetch_evidence(service, requests):
@@ -25,6 +33,10 @@ def fetch_evidence(service, requests):
         try:
             record = service._read("experiments", request["experiment"])
             result.update(execution=record["status"], stage=record.get("stage"))
+            if request.get("inventory") is not None:
+                result["inventory"] = selected_inventory(service, record, request["inventory"])
+                results.append(result)
+                continue
             output = request.get("output")
             if output is None:
                 result["outputs"] = {

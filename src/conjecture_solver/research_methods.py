@@ -311,9 +311,11 @@ class MethodService(RegistrationService):
                 if (name == r["binding"]["source"] or name.endswith((".py", ".F90", ".f90")))
                 and (w / name).stat().st_size <= 131072
             }
+            from .research_receipts import receipt_projection
+
             evidence.append(
                 dict(
-                    record=r,
+                    record=receipt_projection(self, r),
                     documents=docs,
                     sources=validation_sources,
                     raw_artifacts=raw,

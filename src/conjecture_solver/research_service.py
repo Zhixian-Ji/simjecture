@@ -32,7 +32,9 @@ from .research_guidance import GuidedResearch
 from .research_methods import MethodService
 from .research_notebook import NotebookService
 from .research_progress import ProgressService
+from .research_reports import ReportService
 from .research_resources import ResourceService
+from .research_waiting import WaitingService
 
 
 class ResearchVerdict(BaseModel):
@@ -87,8 +89,15 @@ def _positive_finite_seconds(value):
 
 
 class ResearchService(
-    GuidedResearch, MethodService, NotebookService, ProgressService, ControlService,
-    ResourceService, DevelopmentService
+    GuidedResearch,
+    MethodService,
+    NotebookService,
+    ProgressService,
+    ControlService,
+    ResourceService,
+    DevelopmentService,
+    ReportService,
+    WaitingService,
 ):
     def __init__(self, root):
         self.root = Path(root).resolve(strict=True)
@@ -617,7 +626,11 @@ class ResearchService(
     ):
         """Submit a durable review request. This never approves or closes a claim."""
         if disposition not in ["supported", "falsified", "unresolved"] or not conclusion.strip():
-            raise ValueError("Invalid disposition or empty conclusion")
+            raise ValueError(
+                "Use disposition='supported', 'falsified' or 'unresolved' and a nonempty "
+                "conclusion. For an inconclusive report using exploratory results, "
+                "call lab.assess_report(report='RESULTS.md') instead of claim review."
+            )
         if not experiments or len(set(experiments)) != len(experiments):
             raise ValueError("Supply distinct recorded experiments")
         body = dict(
@@ -708,8 +721,11 @@ class ResearchService(
             requirements=self.manifest.get("requirements", {}),
             solver_development=dict(
                 policy=self.solver_development_policy(),
-                registrations=[r for r in self._all("capability_additions")
-                               if r["name"] in development_capabilities],
+                registrations=[
+                    r
+                    for r in self._all("capability_additions")
+                    if r["name"] in development_capabilities
+                ],
             ),
             requirements_evaluation=instrument_requirement(
                 self.manifest, available=self.capability_hashes()
@@ -763,9 +779,11 @@ class ResearchService(
             from .research_audit import review_documents
 
             documents, raw_artifacts, findings = review_documents(workspace, record)
+            from .research_receipts import receipt_projection
+
             packet["experiments"].append(
                 dict(
-                    record=record,
+                    record=receipt_projection(self, record),
                     sources=sources,
                     documents=documents,
                     raw_artifacts=raw_artifacts,
@@ -872,6 +890,7 @@ class ResearchService(
 
     def status(self, *, compact=False):
         self.reconcile_workers()
+        self.reconcile_report_assessments()
         reviews = self._all("reviews")
         for request in reviews:
             if request["status"] == "queued":
@@ -890,6 +909,8 @@ class ResearchService(
 
         snapshot = dict(
             finalization=report_status(self.root, self.manifest),
+            report_assessments=self._all("report_requests"),
+            worker_wait=self.waiting_status(),
             workflow="minimal",
             hypothesis=self.manifest["hypothesis"],
             remaining_seconds=max(0, self.manifest["deadline"] - time.time()),
@@ -933,12 +954,21 @@ class ResearchService(
 
         if compact:
             snapshot["methods"] = [
-                {k: m.get(k) for k in ["id", "created_at", "status", "binding", "verdict"]}
+                {k: m.get(k) for k in ["id", "created_at", "status", "scope", "binding", "verdict"]}
                 for m in snapshot["methods"]
             ]
             snapshot["experiments"] = [
                 dict(
                     id=e["id"],
+                    binding=e["binding"],
+                    key=e.get("key"),
+                    source=e["binding"].get("source"),
+                    finished_at=e.get("finished_at"),
+                    execution={
+                        k: (e.get("execution") or {}).get(k)
+                        for k in ("wall_seconds", "returncode", "timed_out")
+                    },
+                    error=e.get("error"),
                     created_at=e["created_at"],
                     status=e["status"],
                     parent_experiment=e.get("parent_experiment"),
@@ -1133,6 +1163,18 @@ class Lab:
     def review_status(self, identifier):
         return self._service.review_status(identifier)
 
+    def assess_report(self, report="RESULTS.md", **kwargs):
+        return self._service.assess_report(report, **kwargs)
+
+    def report_assessment_status(self, identifier):
+        return self._service.report_assessment_status(identifier)
+
+    def wait(self, reason, **kwargs):
+        return self._service.wait(reason, **kwargs)
+
+    def waiting_status(self):
+        return self._service.waiting_status()
+
     def method(self, **kwargs):
         return self._service.method(**kwargs)
 
@@ -1171,6 +1213,10 @@ def main():
             "commit",
             "review",
             "review_status",
+            "assess_report",
+            "report_assessment_status",
+            "wait",
+            "waiting_status",
             "method",
             "register_capability",
             "note",

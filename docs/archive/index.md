@@ -70,6 +70,7 @@ corrections together with the claimed result.
 - [Z-pinch execution and timestep repair qualification, 2026-10-03](../testing/zpinch-repair-qualification-20261003.md)
 - [Research director and adaptive FLASH qualification, 2026-10-03](../testing/research-director-adaptive-20261003.md)
 - [Large-build, remote-registration and director storage repairs, 2026-10-12](../testing/large-build-remote-registration.md)
+- [Research feedback and evidence-packet repair, 2026-10-14](../testing/research-feedback-repair-20261014.md)
 - [Stagnation retrospective, 2026-09-29](../research/stagnation-retrospective-20260929.md)
 - [Stagnation video outline, 2026-09-29](../research/stagnation-video-outline-20260929.md)
 
@@ -85,6 +86,7 @@ corrections together with the claimed result.
 ../testing/zpinch-repair-qualification-20261003
 ../testing/research-director-adaptive-20261003
 ../testing/large-build-remote-registration
+../testing/research-feedback-repair-20261014
 ../research/stagnation-retrospective-20260929
 ../research/stagnation-video-outline-20260929
 ```

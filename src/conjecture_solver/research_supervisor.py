@@ -163,6 +163,12 @@ class Client:
         return self._call('review', experiments=experiments, conclusion=conclusion, **kw)
     def status(self, compact=True): return self._call('status', compact=compact)
     def review_status(self, identifier): return self._call('review_status', identifier=identifier)
+    def assess_report(self, report='RESULTS.md', **kw):
+        return self._call('assess_report', report=report, **kw)
+    def report_assessment_status(self, identifier):
+        return self._call('report_assessment_status', identifier=identifier)
+    def wait(self, reason, **kw): return self._call('wait', reason=reason, **kw)
+    def waiting_status(self): return self._call('waiting_status')
     def reproduce_anchor(self, **kw): return self._call('reproduce_anchor', **kw)
     def method(self, **kw): return self._call('method', **kw)
     def register_capability(self, name, **kw):
@@ -444,13 +450,23 @@ Write source normally here. All recorded numerical experiments use the existing 
   Or respond='challenge' with a reasoned scientific objection. The director will reassess.
   New simulations require this response; short exploratory analysis remains available.
 - lab.review(['exp_ID',...], 'argument with scope and limitations', claim='root',
-  disposition='supported' or 'falsified', challenge=None) returns a durable review receipt.
+  disposition='supported', 'falsified' or 'unresolved', challenge=None) returns a review receipt.
   Support requires challenge={{'strategy':'how you tried to disprove it',
   'experiments':['exp_ID'], 'outcome':'what the tests showed'}}. Cite submitted evidence.
   Exhaustive finite-domain testing can itself be the challenge; no separate phase needed.
   End this turn after submitting a review so the host can process it. Use
   lab.review_status('review_ID') to retrieve the decision and required next experiment.
   A requested review is not approval. You cannot approve or finalize your own study.
+- For a scientific report, including an inconclusive assessment of exploratory or failed
+  tests, write RESULTS.md and call r=lab.assess_report(report='RESULTS.md',
+    reason='Assess the bounded findings and the specific obstacle to judgment').
+  This uses a separate independent report reviewer and never approves a claim or promotes
+  exploratory results. It can run before the protected finalization period.
+  Call lab.wait('Await independent report feedback', reports=[r['id']]) and end this turn.
+  Retrieve the result with lab.report_assessment_status(r['id']) after the host wakes you.
+  lab.wait also accepts experiments=[...], methods=[...], reviews=[...] or for_operator=True.
+  A wait parks worker inference; experiments, host supervision and the original clock continue.
+  New operator steering wakes you. Do not repeatedly poll unchanged status while waiting.
 - For a repair, first use lab.commit('repaired scientific statement', source='calc.py',
   cases=[['case1'],['case2']], acceptance='predeclared quantitative decision rule',
   inputs=[], capability=None, parent='root', rationale='smallest justified change and why').
@@ -504,12 +520,17 @@ Do not edit service records or other studies. Resume from lab.status() and your 
         if self.finalization_due():
             return True
         # A durable review request is sufficient; don't rely on the CLI ending its turn.
-        return any(
-            r["status"] == "queued" and not self.service.review_blockers(r)
-            for r in self.service._all("reviews")
-        ) or any(
-            m["status"] == "queued" and m.get("retry_after", 0) <= time.time()
-            for m in self.service._all("methods")
+        return (
+            any(
+                r["status"] == "queued" and not self.service.review_blockers(r)
+                for r in self.service._all("reviews")
+            )
+            or any(r["status"] == "queued" for r in self.service._all("report_requests"))
+            or (self.service.waiting_status().get("status") == "waiting")
+            or any(
+                m["status"] == "queued" and m.get("retry_after", 0) <= time.time()
+                for m in self.service._all("methods")
+            )
         )
 
     def process_reviews(self):
@@ -596,6 +617,25 @@ Do not edit service records or other studies. Resume from lab.status() and your 
                                 return 0
                             time.sleep(min(1, max(0, self.state["deadline"] - time.time())))
                             continue
+                        self.process_report_requests()
+                        worker_wait = self.service.waiting_status()
+                        now = time.time()
+                        if (
+                            worker_wait.get("status") == "waiting"
+                            and now - self.state.get("parked_housekeeping_at", 0) < 30
+                        ):
+                            # Quiet waits do not reread every large numerical receipt
+                            # once per second. Reports and operator wake-ups remain immediate.
+                            if now - self.state.get("heartbeat_at", 0) >= 5:
+                                self.state.update(
+                                    activity="Waiting for feedback · " + worker_wait["reason"],
+                                    worker_wait=worker_wait,
+                                    heartbeat_at=now,
+                                )
+                                self.save()
+                            time.sleep(1)
+                            continue
+                        self.state["parked_housekeeping_at"] = now
                         self.process_methods()
                         if self.finalization_due():
                             continue
@@ -617,8 +657,29 @@ Do not edit service records or other studies. Resume from lab.status() and your 
                         if self.finalization_due():
                             continue
                         self.run_director()
+                        if any(
+                            r["status"] == "queued" for r in self.service._all("report_requests")
+                        ):
+                            time.sleep(min(1, max(0, self.state["deadline"] - time.time())))
+                            continue  # Route the report without an unnecessary worker launch.
                         if self.state.pop("director_wake_worker", False):
                             self.state.pop("waiting_for", None)
+                            self.service.wake_worker("Director requested useful work")
+                        from .research_continuation import steering
+
+                        if any(not r.get("delivered_at") for r in steering(self.root)):
+                            self.state.pop("waiting_for", None)
+                            self.service.wake_worker("New operator guidance")
+                        worker_wait = self.service.waiting_status()
+                        if worker_wait.get("status") == "waiting":
+                            self.state["activity"] = (
+                                "Waiting for feedback · " + worker_wait["reason"]
+                            )
+                            self.state["worker_wait"] = worker_wait
+                            self.save()
+                            time.sleep(1)
+                            continue
+                        self.state.pop("worker_wait", None)
                         waiting = self.state.get("waiting_for", [])
                         states = {j["id"]: j["status"] for j in snapshot["experiments"]}
                         if waiting and all(states.get(j) in ["queued", "running"] for j in waiting):

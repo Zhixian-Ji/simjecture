@@ -130,6 +130,79 @@ def test_reviewed_unresolved_report_never_approves_claim(tmp_path, monkeypatch):
     assert sup.service.status()["finalization"]["report_status"] == "changed_since_review"
 
 
+def test_report_request_during_draft_is_fulfilled_by_final_reviewer(tmp_path, monkeypatch):
+    sup = fixture(tmp_path)
+    requests = []
+
+    def launch(directory, prompt, judge=False):
+        if judge:
+            answer(directory)
+        else:
+            (sup.service.work / "RESULTS.md").write_text("Unresolved, with a bounded next test.")
+            request = sup.service.assess_report()
+            requests.append(request["id"])
+            sup.service.wait("Await final report feedback", reports=[request["id"]])
+        return 0
+
+    monkeypatch.setattr(sup, "launch", launch)
+    sup.finalize_report()
+    record = sup.service.report_assessment_status(requests[0])
+    assert record["status"] == "resolved" and record["reviewed_during_finalization"]
+    assert record["assessment"]["decision"] == "accepted"
+    assert sup.service.waiting_status()["status"] == "woken"
+    assert not sup.service.status()["completed"]
+
+
+def test_unreviewed_separate_report_is_deferred_when_finalization_ends(tmp_path, monkeypatch):
+    sup = fixture(tmp_path)
+    (sup.service.work / "separate.md").write_text("An older inconclusive report.")
+    request = sup.service.assess_report("separate.md")
+
+    def launch(directory, prompt, judge=False):
+        if judge:
+            answer(directory)
+        else:
+            (sup.service.work / "RESULTS.md").write_text("The current bounded report.")
+        return 0
+
+    monkeypatch.setattr(sup, "launch", launch)
+    sup.finalize_report()
+    record = sup.service.report_assessment_status(request["id"])
+    assert record["status"] == "deferred" and "no acceptance" in record["error"]
+    assert "assessment" not in record
+
+
+def test_failed_early_assessment_is_fulfilled_by_matching_final_review(tmp_path, monkeypatch):
+    sup = fixture(tmp_path)
+    (sup.service.work / "RESULTS.md").write_text("Unresolved, with a bounded next test.")
+    request = sup.service.assess_report()
+    request.update(status="failed", error="Early reviewer timed out")
+    put(sup.root / "report_requests" / (request["id"] + ".json"), request)
+    monkeypatch.setattr(sup, "launch", lambda d, p, **kw: answer(d) or 0)
+    sup._assess_report(60)
+    record = sup.service.report_assessment_status(request["id"])
+    assert record["status"] == "resolved" and record["assessment"]["decision"] == "accepted"
+    assert record["previous_errors"] == ["Early reviewer timed out"]
+
+
+def test_upgrade_recovers_bound_final_assessment_without_another_reviewer(tmp_path, monkeypatch):
+    sup = fixture(tmp_path)
+    (sup.service.work / "RESULTS.md").write_text("An honest unresolved report.")
+    request = sup.service.assess_report()
+    monkeypatch.setattr(sup, "launch", lambda d, p, **kw: answer(d) or 0)
+    sup._assess_report(60)
+    # Reproduce the stale queue label from the original live acceptance pilot.
+    request["status"] = "queued"
+    put(sup.root / "report_requests" / (request["id"] + ".json"), request)
+    monkeypatch.setattr(
+        sup, "launch", lambda *a, **kw: pytest.fail("Reuse the actual bound verdict")
+    )
+    sup.service.status()
+    record = sup.service.report_assessment_status(request["id"])
+    assert record["status"] == "resolved" and record["reviewed_during_finalization"]
+    assert not sup.service.status()["completed"]
+
+
 def test_report_revision_and_invalid_reviewer_are_bounded(tmp_path, monkeypatch):
     sup = fixture(tmp_path)
     calls = []
