@@ -71,10 +71,17 @@ def private_json(path, value):
     temporary.replace(path)
 
 
-def text(payload, key, limit=20000, default=""):
+def text(payload, key, limit=20000, default="", *, allow_list=False):
     value = payload.get(key, default)
-    if not isinstance(value, str) or len(value) > limit:
-        raise ValueError(f"{key} must be text of at most {limit} characters")
+    expected = "text or a list of text items" if allow_list else "text"
+    if allow_list and isinstance(value, list):
+        if not all(isinstance(item, str) for item in value):
+            raise ValueError(f"{key} must be {expected}")
+        value = "\n\n".join(value)
+    if not isinstance(value, str):
+        raise ValueError(f"{key} must be {expected}")
+    if len(value) > limit:
+        raise ValueError(f"{key} must contain at most {limit} characters (got {len(value)})")
     return value.strip()
 
 
@@ -1512,7 +1519,10 @@ class Workspace(MachineWorkspace, ProjectCollections):
         return {"message": "Stop requested"}
 
     def save_brief(self, identifier, payload):
-        brief = {k: text(payload, k) for k in ("question", "success_criteria", "constraints")}
+        brief = {
+            k: text(payload, k, allow_list=k in {"success_criteria", "constraints"})
+            for k in ("question", "success_criteria", "constraints")
+        }
         brief["hours"] = float(payload.get("hours", 1))
         if not 0.01 <= brief["hours"] <= 168:
             raise ValueError("Choose a budget between 0.01 and 168 hours")

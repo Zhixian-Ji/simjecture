@@ -94,7 +94,15 @@ simjecture workspace --runs-root artifacts --workspace lab call status \
 A message payload is `{"message":"Inspect the reference inputs and prepare a study."}`.
 Sending it starts the configured agent and can consume provider credit. `brief`
 accepts `question`, `success_criteria`, `constraints`, `hours` and
-`completion_policy`. `launch` requires a unique `request_key` and uses the saved
+`completion_policy`. `question` must be a text string. `success_criteria` and
+`constraints` accept either text strings or lists of text strings; list items
+are joined with blank lines and saved as text. Each of these three fields is
+limited to 20,000 characters, including separators added when joining a list.
+The same format applies to a native agent's `STUDY_BRIEF.json`. Nested objects,
+non-text list items and oversized fields are rejected without replacing the
+saved brief. Importing a brief does not launch research.
+
+`launch` requires a unique `request_key` and uses the saved
 brief and model configuration, exactly as the browser does. It starts a real
 autonomous run. `stop` stops the interactive turn; study cancellation uses the
 existing study controls.

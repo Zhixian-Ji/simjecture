@@ -4,6 +4,11 @@ This project follows semantic versioning. Dates use ISO 8601.
 
 ## Unreleased
 
+- Accept lists of text for study brief success criteria and constraints, preserving
+  their items as paragraphs and enforcing the existing 20,000-character limit.
+  Clarify native-agent brief instructions and distinguish invalid types from
+  oversized text in validation errors.
+
 ## 0.6.2rc2 — 2026-10-14
 
 - Keep token-usage/status inspection working for historical or partial study records

@@ -453,23 +453,30 @@ def test_connection_rotation_does_not_reuse_key_for_new_endpoint(tmp_path):
     assert not workspace.settings()["has_key"]
 
 
-def test_detected_cli_uses_existing_transport_and_persists_brief(tmp_path, monkeypatch):
+@pytest.mark.parametrize("list_fields", [False, True])
+def test_detected_cli_uses_existing_transport_and_persists_brief(
+    tmp_path, monkeypatch, list_fields
+):
     binary = tmp_path / "bin"
     binary.mkdir()
     cli = binary / "codex"
     brief = dict(
         question="A clear testable claim",
-        success_criteria="A recorded counterexample",
-        constraints="Ordinary Python",
+        success_criteria="A recorded counterexample\n\nAn independent check",
+        constraints="Ordinary Python\n\nNo paid compute",
         hours=1,
         completion_policy="answer",
     )
+    generated = brief.copy()
+    if list_fields:
+        for field in ("success_criteria", "constraints"):
+            generated[field] = brief[field].split("\n\n")
     cli.write_text(
         f"#!{sys.executable}\nimport json,sys\nfrom pathlib import Path\n"
         "if '--version' in sys.argv:\n    print('fixture-cli 1.0');raise SystemExit(0)\n"
         "Path('cli-result.txt').write_text('Permanent CLI output')\n"
         "Path('cli-argv.json').write_text(json.dumps(sys.argv))\n"
-        f"Path('STUDY_BRIEF.json').write_text({json.dumps(brief)!r})\n"
+        f"Path('STUDY_BRIEF.json').write_text({json.dumps(generated)!r})\n"
         "print(json.dumps({'type':'item.completed','item':{'type':'agent_message',"
         "'text':'CLI preparation completed.'}}))\n"
         "print(json.dumps({'type':'turn.completed','usage':{'input_tokens':2,'output_tokens':3}}))\n"

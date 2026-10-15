@@ -832,7 +832,10 @@ def run_external(prompt, root, config, turn, workspace=None, *, wall_seconds=Non
     prompt += (
         "\nTo prepare an autonomous study, write a JSON object to STUDY_BRIEF.json in "
         "the project files directory, with question, success_criteria, constraints, "
-        "hours (0.01 to 168), completion_policy ('answer' or 'repair'). This prepares "
+        "hours (0.01 to 168), completion_policy ('answer' or 'repair'). "
+        "question must be a text string; success_criteria and constraints may be "
+        "text strings or lists of text strings, joined with blank lines on import. "
+        "Each text field must fit within 20,000 characters after joining. This prepares "
         "an editable brief; it does not launch a study. Existing project files are available."
     )
     if workspace:
