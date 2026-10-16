@@ -102,6 +102,29 @@ The same format applies to a native agent's `STUDY_BRIEF.json`. Nested objects,
 non-text list items and oversized fields are rejected without replacing the
 saved brief. Importing a brief does not launch research.
 
+New studies default to **All available tools**. The agent can choose among the
+installed, registered tools on its execution machines for each experiment.
+The host records the available runtime identities at launch and the tool actually
+used in each receipt. Availability does not establish scientific qualification.
+
+Use `instrument` with an installed catalogue tool or variant ID when a particular
+solver is a scientific requirement. This does not restrict other available tools.
+Under **Execution settings → Tool access**, an operator can restrict the study
+to a registered descriptor file/directory or choose Python only. Native agents
+use the same fields in `STUDY_BRIEF.json`: `capability_directory: "auto"` for all
+available tools, a path for a restricted registry, or `""` for Python only.
+Use `machine_ids` for prepared remote workers, whose configured tool inventories
+are frozen with the pool. Unrelated coordinator tools are not required for a remote study.
+
+Redrafting without tool fields preserves the saved selection, including after a
+restart. An empty `instrument` also preserves it. Explicitly setting
+`capability_directory` to `""` selects ordinary Python; choosing a different path
+replaces the selection. Launch checks that a declared `instrument` is included
+in the available runtime identities. Mentioning a solver only in the question
+does not create a machine-checked solver requirement. Each automatic launch gets
+its own registry; preparing another study cannot change it. Existing studies
+retain their frozen tool bindings and methods policy when resumed.
+
 `launch` requires a unique `request_key` and uses the saved
 brief and model configuration, exactly as the browser does. It starts a real
 autonomous run. `stop` stops the interactive turn; study cancellation uses the

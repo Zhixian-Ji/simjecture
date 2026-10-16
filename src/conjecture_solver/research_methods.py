@@ -155,7 +155,7 @@ class MethodService(RegistrationService):
             name, remote = self._remote_registration(name, machine)
             runtime = remote["runtime_sha256"]
         else:
-            registry = MVPCapabilityRegistry.discover(self.manifest["capabilities"])
+            registry = MVPCapabilityRegistry.discover(self.manifest["capabilities"], names=(name,))
             runtime = registry.get(name).contract_hash
         with self.lock():
             prior = self.capability_hashes().get(name)
@@ -209,7 +209,10 @@ class MethodService(RegistrationService):
             ):
                 raise ValueError("Method needs independent review; end this turn for the host")
         elif stage == "evidence" and (
-            self.manifest.get("methods_required", False)
+            (self.manifest.get("methods_required", False) and (
+                self.manifest.get("method_review_scope", "study") == "study"
+                or binding["capability"] or requirements.get("require_method_review", False)
+            ))
             or any(r["name"] == binding["capability"] for r in self._all("capability_additions"))
         ):
             raise ValueError(

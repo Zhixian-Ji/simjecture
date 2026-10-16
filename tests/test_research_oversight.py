@@ -355,7 +355,8 @@ def test_new_capabilities_append_without_replacing_original_identity(tmp_path, m
 
     registry = Registry()
     monkeypatch.setattr(
-        "conjecture_solver.research_methods.MVPCapabilityRegistry.discover", lambda p: registry
+        "conjecture_solver.research_methods.MVPCapabilityRegistry.discover",
+        lambda p, *, names=None: registry,
     )
     added = s.register_capability("flash-built")
     assert added["runtime_sha256"] == "new-hash"

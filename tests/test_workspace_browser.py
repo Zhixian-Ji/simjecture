@@ -107,6 +107,8 @@ def test_browser_setup_chat_files_and_autonomous_handoff(tmp_path, provider):
             playwright.expect(page.locator("#solver-development")).to_be_checked()
             page.locator("#solver-development").uncheck()
             page.locator("#brief-form .advanced > summary").click()
+            assert page.locator("#study-tools").input_value() == "auto"
+            assert page.locator("#study-tools").is_visible()
             playwright.expect(page.locator("#research-director")).to_be_checked()
             page.locator("#research-director").uncheck()
             page.locator("#review-model").fill("fixture-model")

@@ -404,7 +404,8 @@ class SimjectureWebApplication:
                 **extra,
                 hypothesis=hypothesis,
                 instruction=instruction,
-                capability_directory=_optional_text(payload, "capability_directory", maximum=4096),
+                capability_directory=_optional_text(payload, "capability_directory", maximum=4096)
+                or ("auto" if mode != "legacy" else None),
                 campaign_id=campaign_id,
                 output_directory=str(self.runs_root / campaign_id),
                 max_wall_seconds=_bounded_float(payload, "max_wall_seconds", 21_600, 1, 604_800),

@@ -51,15 +51,20 @@ review = lab.review_status(request["id"])
 records their hashes and arguments, and runs the experiment inside Simjecture's
 selected numerical execution backend (Bubblewrap by default; cooperative PRoot
 is not a security boundary). An installed capability can be selected
-with `capability=NAME`. Supply its manifest directory using `--capabilities` or
-the numerical instrument registry field in the browser/TUI. With no registry,
-minimal exposes only the Python numerical sandbox. Its identity is bound to the receipt. Native tools are
+with `capability=NAME`. New studies automatically expose the available installed
+tools. Use the advanced Tool access setting, or `--capabilities DIR`, to restrict
+them; `--capabilities none` selects Python only. Available tools and the tool
+actually used are separate: each receipt binds the selected runtime identity.
+Resuming a study keeps its saved registry. Native tools are
 available for exploration; execution success alone does not accept a claim.
 
 ## Exploratory analysis and advisory progress
 
-`lab.run` defaults to evidence collection. When the study requires methods review,
-this gate also applies to evidence-producing postprocessing. For diagnostics,
+`lab.run` defaults to evidence collection. New automatic-tool studies require
+methods review for instrument-backed evidence, rather than for merely having
+unused tools installed. An explicit operator methods requirement applies to all
+evidence, including postprocessing. Older studies keep their whole-study policy.
+For diagnostics,
 arithmetic validation, or reduction while method approval is pending, use:
 
 ```python

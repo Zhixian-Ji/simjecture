@@ -1518,6 +1518,37 @@ class Workspace(MachineWorkspace, ProjectCollections):
                 os.killpg(record["pid"], signal.SIGTERM)
         return {"message": "Stop requested"}
 
+    def _instrument_path(self, instrument):
+        catalogue = self.catalogue()
+        selected = next((t for t in catalogue if instrument in {t["id"], t["name"]}), None)
+        if not selected:
+            selected = next(
+                (
+                    v | {"installed": True}
+                    for t in catalogue
+                    for v in t.get("variants", [])
+                    if instrument in {v["id"], v["name"], v["label"]}
+                ),
+                None,
+            )
+        if not selected or not selected.get("installed") or not selected.get("path"):
+            raise ValueError(
+                "The requested instrument needs a registered research capability. "
+                "Resolve setup before proposing the study."
+            )
+        return str(Path(selected["path"]).expanduser().resolve())
+
+    def _available_tools(self, *, instrument=None):
+        from .inventory import freeze_available_tools
+
+        paths = [self._instrument_path(instrument)] if instrument else []
+        for card in self.catalogue():
+            paths += [item["path"] for item in [card, *card.get("variants", [])]
+                      if item.get("path")]
+        return freeze_available_tools(
+            paths, self.root / "available-tools" / uuid.uuid4().hex,
+        )
+
     def save_brief(self, identifier, payload):
         brief = {
             k: text(payload, k, allow_list=k in {"success_criteria", "constraints"})
@@ -1544,24 +1575,8 @@ class Workspace(MachineWorkspace, ProjectCollections):
             brief["machine_ids"] = requested_machines
         instrument = text(payload, "instrument", 160)
         if instrument:
-            catalogue = self.catalogue()
-            selected = next((t for t in catalogue if instrument in {t["id"], t["name"]}), None)
-            if not selected:
-                selected = next(
-                    (
-                        v | {"installed": True}
-                        for t in catalogue
-                        for v in t.get("variants", [])
-                        if instrument in {v["id"], v["name"], v["label"]}
-                    ),
-                    None,
-                )
-            if not selected or not selected.get("installed") or not selected.get("path"):
-                raise ValueError(
-                    "The requested instrument needs a registered research capability. "
-                    "Resolve setup before proposing the study."
-                )
-            brief["capability_directory"] = selected["path"]
+            self._instrument_path(instrument)  # Validate the scientific requirement.
+            brief["instrument"] = instrument
         if brief["completion_policy"] not in {"answer", "repair"}:
             raise ValueError("Choose answer or repair completion")
         if not brief["question"] or not brief["success_criteria"]:
@@ -1583,14 +1598,14 @@ class Workspace(MachineWorkspace, ProjectCollections):
                 project.get("continuation_draft") or {}
             ):
                 brief["machine_ids"] = project["continuation_draft"]["machine_ids"]
+            prior = project.get("brief") or project.get("continuation_draft") or {}
+            if "capability_directory" not in payload:
+                brief["capability_directory"] = prior.get("capability_directory", "auto")
             if (
-                "capability_directory" not in payload
-                and not instrument
-                and project.get("continuation_draft")
+                not instrument and prior.get("instrument")
+                and brief["capability_directory"]
             ):
-                brief["capability_directory"] = project["continuation_draft"].get(
-                    "capability_directory"
-                ) or (project.get("brief") or {}).get("capability_directory", "")
+                brief["instrument"] = prior["instrument"]
             if payload.get("inherited_files") is not None:
                 from ..research_continuation import selected_file
 
@@ -1940,7 +1955,7 @@ class Workspace(MachineWorkspace, ProjectCollections):
 
     def launch(self, identifier, payload, application):
         from ..mvp_launch import start_managed_campaign
-        from ..mvp_skills import MVPCapabilityRegistry
+        from ..mvp_skills import MVPCapabilityInstallation, MVPCapabilityRegistry
         from ..study_launch import NativeStudyRequest, materialize_native
 
         directory = self.directory(identifier)
@@ -1965,16 +1980,25 @@ class Workspace(MachineWorkspace, ProjectCollections):
                 raise ValueError("This proposal has already launched. Prepare another study first.")
             capability_directory = (
                 text(payload, "capability_directory", 4096)
-                or brief.get("capability_directory")
-                or None
+                if "capability_directory" in payload
+                else brief.get("capability_directory", "auto")
             )
+            automatic_tools = capability_directory == "auto"
+            if automatic_tools:
+                capability_directory = (
+                    self._available_tools(instrument=brief.get("instrument"))
+                    if not brief.get("machine_ids") or brief.get("instrument") else None
+                )
+            if brief.get("instrument") and not capability_directory:
+                raise ValueError(
+                    "Select tools containing the declared instrument before launching. "
+                    "To use ordinary Python, explicitly clear the tool selection in the brief."
+                )
             if capability_directory:
                 capability_directory = str(Path(capability_directory).expanduser().resolve())
                 selected = Path(capability_directory)
                 if selected.is_file():
                     # Symlinks preserve the descriptor's original relative runtime paths.
-                    from ..mvp_skills import MVPCapabilityInstallation
-
                     MVPCapabilityInstallation.read(selected)
                     suffix = hashlib.sha256(str(selected).encode()).hexdigest()[:10]
                     inventory = (
@@ -1989,8 +2013,21 @@ class Workspace(MachineWorkspace, ProjectCollections):
                     if link.resolve() != selected:
                         raise ValueError("A different instrument already uses this inventory name")
                     capability_directory = str(inventory)
-                if not MVPCapabilityRegistry.discover(capability_directory).hashes:
+                registry = MVPCapabilityRegistry.discover(capability_directory)
+                if not registry.hashes and not automatic_tools:
                     raise ValueError("Selected capability directory contains no instruments")
+                if brief.get("instrument"):
+                    required = Path(self._instrument_path(brief["instrument"]))
+                    if required.is_file():
+                        installation = MVPCapabilityInstallation.read(required)
+                        expected = {installation.manifest.name: installation.contract_hash}
+                    else:
+                        expected = MVPCapabilityRegistry.discover(required).hashes
+                    if not expected or not expected.items() <= registry.hashes.items():
+                        raise ValueError(
+                            "Selected tools do not include the declared instrument. "
+                            "Update the brief's tool selection before launching."
+                        )
             # Human-readable study folders; receipt IDs remain internal to the evidence service.
             number = len(project["studies"]) + 1
             slug = (
@@ -2014,6 +2051,12 @@ class Workspace(MachineWorkspace, ProjectCollections):
                 "They are preparation, not accepted evidence. "
                 "Keep conclusions bounded to the agreed question and tested domain."
             )
+            if brief.get("instrument"):
+                instruction += (
+                    f"\nDeclared instrument requirement: {brief['instrument']}. "
+                    "Document its use in answering the question for independent review. "
+                    "Other tools remain available for supporting experiments and analysis."
+                )
             # Freeze before materializing the scientific contract. Keep the snapshot
             # outside research until materialize_native has created the run directory.
             context_staging = self.root / "context-staging" / uuid.uuid4().hex
@@ -2043,6 +2086,7 @@ class Workspace(MachineWorkspace, ProjectCollections):
                     max_wall_seconds=brief["hours"] * 3600,
                     max_command_seconds=600,
                     capability_directory=capability_directory,
+                    method_review_scope="used_instruments",
                     execution_backend=payload.get("execution_backend", self.execution["backend"]),
                     machine_registry=str(self.machine_registry.root)
                     if brief.get("machine_ids")
