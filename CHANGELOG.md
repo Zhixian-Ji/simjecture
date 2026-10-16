@@ -4,15 +4,17 @@ This project follows semantic versioning. Dates use ISO 8601.
 
 ## Unreleased
 
-- Add an experimental operator-side WSL bridge to an existing Windows CST
-  installation: inspect saved 0D/1D results and submit parameterized magnetostatic
-  jobs with verified source snapshots, forced local execution, serialized Windows
-  process cleanup, deadlines and terminal launch-failure receipts. Add Linux
-  regression coverage and native Windows boundary checks without CST. This does
-  not expose CST through the Linux numerical sandbox or enable evidence-stage execution.
+- Add an experimental common Windows application interface with discovery,
+  frozen per-job runner bundles, complete input inventories, asynchronous jobs,
+  deadlines, cancellation, process ownership and verified output artifacts.
+  Keep the CST commands on the shared runner and add native CST Python scripts
+  plus an experimental SOLIDWORKS COM part rebuild/export adapter. SOLIDWORKS
+  model commissioning and COMSOL execution remain outside the current validation.
+  Add Linux regression coverage and native Windows process/fixture tests without
+  vendor applications. Jobs use trusted host processes and remain exploratory.
   Ship a discoverable `cst-geometry` skill covering imported-solid edits, recorded
   history, full-profile comparisons and assembly checks through authorized native
-  automation; geometry editing is not a bridge CLI command.
+  automation; native CST scripts use the generic Windows submission interface.
 
 - Preserve autonomous-study tool selections across agent redrafting and restarts.
   Teach native agents to attach registered tools in study briefs, retain declared

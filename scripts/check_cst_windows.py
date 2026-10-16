@@ -1,4 +1,4 @@
-"""Exercise the native CST supervisor boundary without CST, a license or dependencies.
+"""Exercise the shared Windows supervisor without vendor applications or dependencies.
 
 Run with Windows Python 3.9+; the ordinary Linux tests cover snapshot and VBA policy.
 """
@@ -10,6 +10,7 @@ import ctypes
 import hashlib
 import importlib.util
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -78,6 +79,18 @@ class NativeSupervisorTests(unittest.TestCase):
             runner_sha256="b" * 64,
             python_sha256="c" * 64,
         )
+        if RUNNER.PROTOCOL == "simjecture-windows/1":
+            self.request.update(
+                application="cst",
+                operation="magnetostatic.solve",
+                arguments={
+                    "parameters": self.request.pop("parameters"),
+                    "results": self.request.pop("results"),
+                },
+                runtime={"runtime/" + name: "b" * 64 for name in RUNNER.BUNDLE},
+            )
+            self.request.pop("solver")
+            self.request.pop("runner_sha256")
         RUNNER.write(self.job / "request.json", self.request)
         RUNNER.write(self.job / "state.json", {"protocol": RUNNER.PROTOCOL, "status": "queued"})
         key = hashlib.sha256(self.installation.lower().encode()).hexdigest()
@@ -201,6 +214,162 @@ class NativeSupervisorTests(unittest.TestCase):
             self.assertEqual(RUNNER.submit(self.job)["status"], "queued")
             self.assertEqual(launch.call_count, 1)
 
+    def test_invalid_request_is_terminal_before_worker_creation(self):
+        request = dict(self.request, timeout=-1)
+        RUNNER.write(self.job / "request.json", request)
+        with patch.object(subprocess, "Popen", side_effect=AssertionError("must not launch")):
+            RUNNER.supervise(self.job)
+        state = RUNNER.read(self.job / "state.json")
+        self.assertEqual(state["status"], "failed")
+        self.assertIn("Invalid request", state["error"])
+        self.assertIn("finished_at", state)
+
+    def test_cancel_during_verification_does_not_start_worker(self):
+        def verify(*args):
+            (self.job / "cancel").touch()
+
+        with (
+            patch.object(RUNNER, "verify_inputs", verify),
+            patch.object(subprocess, "Popen", side_effect=AssertionError("must not launch")),
+        ):
+            RUNNER.supervise(self.job)
+        self.assertEqual(RUNNER.read(self.job / "state.json")["status"], "cancelled")
+
+    def test_new_external_process_can_be_adopted_by_named_job(self):
+        if not hasattr(RUNNER, "claim_process"):
+            self.skipTest("Legacy CST compatibility entrypoint")
+        native = RUNNER.WindowsJob(name=RUNNER.job_name(self.job))
+        before = RUNNER.begin_external_activation(self.job, sys.executable)
+        child = subprocess.Popen([sys.executable, "-I", "-c", "import time; time.sleep(30)"])
+        try:
+            RUNNER.claim_process(self.job, child.pid, before, sys.executable)
+            self.assertEqual(RUNNER.read(self.job / "external-activation.json")["stage"], "owned")
+            native.terminate()
+            child.wait(timeout=10)
+            self.assertFalse(process_alive(child.pid))
+        finally:
+            native.close()
+            if child.poll() is None:
+                child.kill()
+                child.wait(timeout=10)
+
+    def test_existing_process_is_not_adopted_or_killed(self):
+        if not hasattr(RUNNER, "claim_process"):
+            self.skipTest("Legacy CST compatibility entrypoint")
+        child = subprocess.Popen([sys.executable, "-I", "-c", "import time; time.sleep(30)"])
+        native = RUNNER.WindowsJob(name=RUNNER.job_name(self.job))
+        try:
+            with self.assertRaisesRegex(RuntimeError, "existing application session"):
+                RUNNER.claim_process(self.job, child.pid, time.time() + 1)
+            native.terminate()
+            self.assertTrue(process_alive(child.pid))
+        finally:
+            native.close()
+            child.terminate()
+            child.wait(timeout=10)
+
+    def test_unknown_external_activation_stop_is_reported_as_interrupted(self):
+        if not hasattr(RUNNER, "begin_external_activation"):
+            self.skipTest("Legacy CST compatibility entrypoint")
+        RUNNER.begin_external_activation(self.job, "C:\\UnknownApplication.exe")
+        real_popen = subprocess.Popen
+
+        def launch(*args, **kwargs):
+            return real_popen(self.worker_command(), **kwargs)
+
+        with patch.object(RUNNER, "verify_inputs"), patch.object(subprocess, "Popen", launch):
+            RUNNER.supervise(self.job)
+        state = RUNNER.read(self.job / "state.json")
+        self.assertEqual(state["status"], "interrupted")
+        self.assertIn("unconfirmed", state["error"])
+        self.assertFalse(process_alive(int((self.job / "descendant.pid").read_text())))
+
+    def test_selected_executable_is_checked_after_new_process_adoption(self):
+        if not hasattr(RUNNER, "claim_process"):
+            self.skipTest("Legacy CST compatibility entrypoint")
+        native = RUNNER.WindowsJob(name=RUNNER.job_name(self.job))
+        before = RUNNER.begin_external_activation(self.job, sys.executable)
+        child = subprocess.Popen([sys.executable, "-I", "-c", "import time; time.sleep(30)"])
+        try:
+            with self.assertRaisesRegex(RuntimeError, "selected installation"):
+                RUNNER.claim_process(self.job, child.pid, before, self.root / "wrong.exe")
+            native.terminate()
+            child.wait(timeout=10)
+        finally:
+            native.close()
+            if child.poll() is None:
+                child.kill()
+                child.wait(timeout=10)
+
+    def test_frozen_bundle_executes_a_fixture_adapter_end_to_end(self):
+        if not hasattr(RUNNER, "BUNDLE"):
+            self.skipTest("Legacy CST compatibility entrypoint")
+        (self.job / "runtime").mkdir()
+        (self.job / "inputs").mkdir()
+        (self.job / "inputs/project.cst").write_bytes(b"fixture input, not a CST model")
+        for name in RUNNER.BUNDLE:
+            shutil.copyfile(Path(RUNNER.__file__).with_name(name), self.job / "runtime" / name)
+        # This deliberately replaces the application adapter, not the shared
+        # protocol, staging, verification, supervisor, worker or artifact code.
+        # It exercises Windows execution without implying vendor qualification.
+        (self.job / "runtime/cst_windows.py").write_text(
+            "def validate(operation, arguments, inputs):\n"
+            "    assert operation == 'magnetostatic.solve'\n"
+            "    assert set(inputs) == {'inputs/project.cst'}\n"
+            "def execute(job, request, context):\n"
+            "    source = job / 'work/project.cst'\n"
+            "    assert source.read_bytes() == b'fixture input, not a CST model'\n"
+            "    (job / 'work/output.txt').write_text('fixture output')\n"
+            "    return {'fixture': True}\n",
+            encoding="utf-8",
+        )
+        request = dict(self.request)
+        request.update(
+            python=sys.executable,
+            python_sha256=RUNNER.sha(sys.executable),
+            inputs=RUNNER.inventory(self.job / "inputs", "inputs"),
+            runtime=RUNNER.inventory(self.job / "runtime", "runtime"),
+            created_at=time.time(),
+            timeout=20,
+        )
+        RUNNER.write(self.job / "request.json", request)
+        RUNNER.write(
+            self.job / "state.json",
+            {
+                "protocol": RUNNER.PROTOCOL,
+                "status": "queued",
+                "request_sha256": RUNNER.sha(self.job / "request.json"),
+            },
+        )
+        runner = self.job / "runtime/windows_runtime.py"
+        subprocess.run(
+            [sys.executable, "-I", "-B", str(runner), "submit", "--job", str(self.job)],
+            check=True,
+            capture_output=True,
+            timeout=10,
+        )
+        deadline = time.monotonic() + 25
+        while time.monotonic() < deadline:
+            state = RUNNER.read(self.job / "state.json")
+            if state["status"] in RUNNER.TERMINAL:
+                break
+            time.sleep(0.05)
+        self.assertEqual(state["status"], "succeeded", state)
+        while process_alive(state["supervisor_pid"]) and time.monotonic() < deadline:
+            time.sleep(0.01)
+        self.assertFalse(process_alive(state["supervisor_pid"]))
+        result = RUNNER.read(self.job / "results.json")
+        self.assertTrue(result["fixture"])
+        self.assertFalse(result["evidence_eligible"])
+        self.assertEqual(result["application"], "cst")
+        self.assertEqual(RUNNER.sha(self.job / "results.json"), state["results_sha256"])
+        for artifact in result["artifacts"]:
+            self.assertEqual(RUNNER.sha(self.job / artifact["path"]), artifact["sha256"])
+        self.assertEqual((self.job / "work/output.txt").read_text(), "fixture output")
+        self.assertEqual(
+            (self.job / "inputs/project.cst").read_bytes(), b"fixture input, not a CST model"
+        )
+
 
 def main():
     global RUNNER
@@ -209,7 +378,7 @@ def main():
     parser.add_argument(
         "--runner",
         type=Path,
-        default=Path(__file__).resolve().parents[1] / "src/conjecture_solver/cst_windows.py",
+        default=Path(__file__).resolve().parents[1] / "src/conjecture_solver/windows_runtime.py",
     )
     parser.add_argument("--worker-job", type=Path)
     parser.add_argument("--hold-worker", action="store_true")

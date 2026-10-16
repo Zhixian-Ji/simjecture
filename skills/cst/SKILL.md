@@ -16,6 +16,15 @@ Read the installed CST Python and VBA documentation for its exact release.
 availability only. The built-in Python is used when present; `--python` selects
 another Windows interpreter compatible with that CST release.
 
+The existing CST commands use the common Windows application runner. Discover
+operations with `simjecture windows describe --application cst`. Its
+`project.python` operation stages a trusted Python script, opens a working project
+and supplies `project`, `environment`, `work_directory`, `parameters` and `result`.
+Use that operation for native modeling scripts beyond the structured magnetostatic
+recipe. It saves/closes the owned copy, records artifacts and does not implicitly
+run a solver. Leave JSON-serializable observations in `result`; preserve model
+history and verify geometry separately.
+
 For creating or editing solids, imported CAD, rounded tips, or complete profile
 comparisons, read the separate `cst-geometry` skill (`read_skill(name="cst-geometry")`
 for API agents). It documents authorized native automation; geometry editing is

@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 jobs:
-  cst-windows-boundary:
+  windows-application-boundary:
     runs-on: windows-latest
     timeout-minutes: 5
     strategy:
@@ -20,8 +20,10 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Test the Windows process boundary without CST or a license
+      - name: Test shared Windows process ownership without vendor applications
         run: python scripts/check_cst_windows.py
+      - name: Test legacy CST entrypoint compatibility
+        run: python scripts/check_cst_windows.py --runner src/conjecture_solver/cst_windows.py
 
   documentation:
     runs-on: ubuntu-latest

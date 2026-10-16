@@ -7,7 +7,6 @@ Do not import CST libraries until after a worker belongs to its Windows Job Obje
 from __future__ import annotations
 
 import argparse
-import ctypes
 import hashlib
 import json
 import math
@@ -18,8 +17,22 @@ import subprocess
 import sys
 import time
 import traceback
-from contextlib import ExitStack
 from pathlib import Path
+
+# A standalone Windows invocation uses -I, which excludes the script directory.
+# Load the fixed sibling by path instead of importing the Linux package/dependencies.
+if __package__:
+    from . import windows_runtime as shared
+else:
+    import importlib.util
+
+    _spec = importlib.util.spec_from_file_location(
+        "simjecture_windows_runtime",
+        Path(__file__).with_name("windows_runtime.py"),
+    )
+    shared = importlib.util.module_from_spec(_spec)
+    _spec.loader.exec_module(shared)
+
 
 TERMINAL = {"succeeded", "failed", "cancelled", "timed_out", "interrupted"}
 PROTOCOL = "simjecture-cst/1"
@@ -111,10 +124,8 @@ def validate_request(value):
 
 
 def verify_inputs(job, request):
-    for relative, expected in request["inputs"].items():
-        path = job / relative
-        if path.is_symlink() or not path.is_file() or sha(path) != expected:
-            raise ValueError("CST input changed: " + relative)
+    if shared.inventory(job / "inputs", "inputs") != request["inputs"]:
+        raise ValueError("CST input changed: complete inventory differs")
     if sha(job / "request.json") != read(job / "state.json")["request_sha256"]:
         raise ValueError("CST request changed since submission")
     if sha(Path(__file__)) != request["runner_sha256"]:
@@ -177,116 +188,7 @@ def encode_numbers(value):
     return value
 
 
-class WindowsJob:
-    """Closing the native job kills exactly its assigned processes and descendants."""
-
-    def __init__(self):
-        from ctypes import wintypes as w
-
-        class Basic(ctypes.Structure):
-            _fields_ = [
-                ("ProcessTime", ctypes.c_longlong),
-                ("JobTime", ctypes.c_longlong),
-                ("LimitFlags", w.DWORD),
-                ("MinWorkingSet", ctypes.c_size_t),
-                ("MaxWorkingSet", ctypes.c_size_t),
-                ("ActiveProcesses", w.DWORD),
-                ("Affinity", ctypes.c_size_t),
-                ("Priority", w.DWORD),
-                ("Scheduling", w.DWORD),
-            ]
-
-        class IO(ctypes.Structure):
-            _fields_ = [
-                (name, ctypes.c_ulonglong)
-                for name in (
-                    "ReadOps",
-                    "WriteOps",
-                    "OtherOps",
-                    "ReadBytes",
-                    "WriteBytes",
-                    "OtherBytes",
-                )
-            ]
-
-        class Extended(ctypes.Structure):
-            _fields_ = [
-                ("Basic", Basic),
-                ("IO", IO),
-                ("ProcessMemory", ctypes.c_size_t),
-                ("JobMemory", ctypes.c_size_t),
-                ("PeakProcessMemory", ctypes.c_size_t),
-                ("PeakJobMemory", ctypes.c_size_t),
-            ]
-
-        self.kernel = ctypes.WinDLL("kernel32", use_last_error=True)
-        self.kernel.CreateJobObjectW.argtypes = [ctypes.c_void_p, w.LPCWSTR]
-        self.kernel.CreateJobObjectW.restype = w.HANDLE
-        self.kernel.SetInformationJobObject.argtypes = [
-            w.HANDLE,
-            ctypes.c_int,
-            ctypes.c_void_p,
-            w.DWORD,
-        ]
-        self.kernel.AssignProcessToJobObject.argtypes = [w.HANDLE, w.HANDLE]
-        self.kernel.CloseHandle.argtypes = [w.HANDLE]
-        self.kernel.TerminateJobObject.argtypes = [w.HANDLE, w.UINT]
-        self.kernel.QueryInformationJobObject.argtypes = [
-            w.HANDLE,
-            ctypes.c_int,
-            ctypes.c_void_p,
-            w.DWORD,
-            ctypes.c_void_p,
-        ]
-        self.handle = self.kernel.CreateJobObjectW(None, None)
-        if not self.handle:
-            raise ctypes.WinError(ctypes.get_last_error())
-        limits = Extended()
-        limits.Basic.LimitFlags = 0x2000  # JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
-        if not self.kernel.SetInformationJobObject(
-            self.handle, 9, ctypes.byref(limits), ctypes.sizeof(limits)
-        ):
-            self.close()
-            raise ctypes.WinError(ctypes.get_last_error())
-
-    def assign(self, process):
-        if not self.kernel.AssignProcessToJobObject(self.handle, int(process._handle)):
-            raise ctypes.WinError(ctypes.get_last_error())
-
-    def close(self):
-        if self.handle:
-            self.kernel.CloseHandle(self.handle)
-            self.handle = None
-
-    def terminate(self):
-        """Confirm assigned Windows processes exit before reporting a stop."""
-        from ctypes import wintypes as w
-
-        class Accounting(ctypes.Structure):
-            _fields_ = [
-                ("UserTime", ctypes.c_longlong),
-                ("KernelTime", ctypes.c_longlong),
-                ("PeriodUserTime", ctypes.c_longlong),
-                ("PeriodKernelTime", ctypes.c_longlong),
-                ("PageFaults", w.DWORD),
-                ("TotalProcesses", w.DWORD),
-                ("ActiveProcesses", w.DWORD),
-                ("TerminatedProcesses", w.DWORD),
-            ]
-
-        if not self.kernel.TerminateJobObject(self.handle, 125):
-            raise ctypes.WinError(ctypes.get_last_error())
-        deadline = time.monotonic() + 20
-        while time.monotonic() < deadline:
-            info = Accounting()
-            if not self.kernel.QueryInformationJobObject(
-                self.handle, 1, ctypes.byref(info), ctypes.sizeof(info), None
-            ):
-                raise ctypes.WinError(ctypes.get_last_error())
-            if info.ActiveProcesses == 0:
-                return
-            time.sleep(0.05)
-        raise TimeoutError("Windows job termination is unconfirmed")
+WindowsJob = shared.WindowsJob
 
 
 def launch_frontend(installation, project, interface):
@@ -311,17 +213,8 @@ def launch_frontend(installation, project, interface):
     raise RuntimeError("CST frontend exited before its automation interface became ready")
 
 
-def worker(job):
-    request = validate_request(read(job / "request.json"))
-    while not (job / "assigned").exists():
-        if time.time() > request["created_at"] + request["timeout"]:
-            raise TimeoutError("Windows Job assignment deadline expired")
-        time.sleep(0.05)
-    verify_inputs(job, request)
-    work = job / "work"
-    shutil.copytree(job / "inputs", work)
-    project_path = work / "project.cst"
-    os.chdir(work)
+def _execute_cst(job, request):
+    project_path = job / "work/project.cst"
     print("Loading CST automation libraries", flush=True)
     interface, _, handles = load_cst(request["installation"])
     print("Starting a new CST frontend", flush=True)
@@ -332,40 +225,63 @@ def worker(job):
     try:
         print("Opening the working project copy", flush=True)
         project = environment.open_project(str(project_path))
-        commands = ["Sub Main()", "DeleteResults", 'ChangeSolverType "LF MStatic"']
-        for name in request["parameters"]:
-            commands.append(
-                'If Not DoesParameterExist("' + name + '") Then '
-                'Err.Raise 1001, "Simjecture", "Unknown parameter: ' + name + '"'
+        script_result = None
+        if request.get("operation") == "project.python":
+            script = job / request["arguments"]["script"]
+            namespace = {
+                "project": project,
+                "environment": environment,
+                "work_directory": project_path.parent,
+                "parameters": dict(request["parameters"]),
+                "result": {},
+                "__name__": "__main__",
+                "__file__": str(script),
+            }
+            previous_argv = sys.argv
+            try:
+                sys.argv = [str(script)]
+                exec(compile(script.read_bytes(), str(script), "exec"), namespace)
+            finally:
+                sys.argv = previous_argv
+            script_result = namespace["result"]
+            if not isinstance(script_result, dict):
+                raise ValueError("A native script must leave result as a JSON object")
+            project.save()
+            project.close()
+        else:
+            commands = ["Sub Main()", "DeleteResults", 'ChangeSolverType "LF MStatic"']
+            for name in request["parameters"]:
+                commands.append(
+                    'If Not DoesParameterExist("' + name + '") Then '
+                    'Err.Raise 1001, "Simjecture", "Unknown parameter: ' + name + '"'
+                )
+            for name, value in request["parameters"].items():
+                commands.append('StoreParameter "' + name + '", "' + repr(value) + '"')
+            commands.extend(
+                [
+                    'If Not Rebuild() Then Err.Raise 1002, "Simjecture", "Model rebuild failed"',
+                    "End Sub",
+                ]
             )
-        for name, value in request["parameters"].items():
-            commands.append('StoreParameter "' + name + '", "' + repr(value) + '"')
-        commands.extend(
-            [
-                'If Not Rebuild() Then Err.Raise 1002, "Simjecture", "Model rebuild failed"',
-                "End Sub",
-            ]
-        )
-        print("Deleting copied results, updating parameters and rebuilding", flush=True)
-        project.schematic.execute_vba_code("\n".join(commands))
-        project.save()
-        print("Starting magnetostatic solver", flush=True)
-        # Invoke this solver explicitly. A saved example may select a parameter
-        # sweep as its active top-level task; that must not replay other cases.
-        # Rebuild can restore distributed settings from history. Override them
-        # here, immediately before Start: remote/DC services are outside our job.
-        project.schematic.execute_vba_code(
-            "Sub Main()\nMStaticSolver.UseDistributedComputing False\n"
-            "If MStaticSolver.Start <> 0 Then "
-            'Err.Raise 1003, "Simjecture", "Magnetostatic solver failed"\nEnd Sub'
-        )
-        print("Saving fresh results", flush=True)
-        project.save()
-        project.close()
+            print("Deleting copied results, updating parameters and rebuilding", flush=True)
+            project.schematic.execute_vba_code("\n".join(commands))
+            project.save()
+            print("Starting magnetostatic solver", flush=True)
+            # Invoke this solver explicitly. A saved example may select a parameter
+            # sweep as its active top-level task; that must not replay other cases.
+            # Rebuild can restore distributed settings from history. Override them
+            # here, immediately before Start: remote/DC services are outside our job.
+            project.schematic.execute_vba_code(
+                "Sub Main()\nMStaticSolver.UseDistributedComputing False\n"
+                "If MStaticSolver.Start <> 0 Then "
+                'Err.Raise 1003, "Simjecture", "Magnetostatic solver failed"\nEnd Sub'
+            )
+            print("Saving fresh results", flush=True)
+            project.save()
+            project.close()
     finally:
         print("Closing the job's CST frontend", flush=True)
         environment.close()
-    verify_inputs(job, request)
     data = inspect_project(request["installation"], str(project_path), request["results"])
     for rows in data["results"].values():
         for row in rows:
@@ -376,170 +292,204 @@ def worker(job):
                 ):
                     raise ValueError("Result parameters differ from the submitted job: " + name)
     data.update(
+        parameters=request["parameters"],
+        cst_runtime=read(job / "cst-process.json"),
+    )
+    if script_result is not None:
+        data["script_result"] = script_result
+    del handles
+    return data
+
+
+def worker(job):
+    """Compatibility entrypoint for the original CST request protocol."""
+    request = validate_request(read(job / "request.json"))
+    while not (job / "assigned").exists():
+        if time.time() > request["created_at"] + request["timeout"]:
+            raise TimeoutError("Windows Job assignment deadline expired")
+        time.sleep(0.05)
+    verify_inputs(job, request)
+    shutil.copytree(job / "inputs", job / "work")
+    if shared.inventory(job / "work", "inputs") != shared.inventory(job / "inputs", "inputs"):
+        raise ValueError("Working copy differs from the CST input snapshot")
+    os.chdir(job / "work")
+    data = _execute_cst(job, request)
+    verify_inputs(job, request)
+    data.update(
         stage="exploration",
         evidence_eligible=False,
         execution_boundary="trusted-windows-process",
         solver_execution="local",
-        parameters=request["parameters"],
         inputs=request["inputs"],
-        runtime=read(job / "cst-process.json"),
         runner_sha256=request["runner_sha256"],
         python_sha256=request["python_sha256"],
     )
     write(job / "results.json", data)
-    del handles
 
 
-def stopped(job, request):
-    if (job / "cancel").exists():
-        return "cancelled"
-    if time.time() >= request["created_at"] + request["timeout"]:
-        return "timed_out"
-    return None
+stopped = shared.stopped
 
 
 def supervise(job):
-    import msvcrt
-
-    request = validate_request(read(job / "request.json"))
-    state = read(job / "state.json")
-    state.update(supervisor_pid=os.getpid())
-    write(job / "state.json", state)
-    native_job = None
-    child = None
-    # One CST job per installation, including when different job roots are used.
-    locks = Path(os.environ["LOCALAPPDATA"]) / "Simjecture/cst-locks"
-    locks.mkdir(parents=True, exist_ok=True)
-    key = hashlib.sha256(request["installation"].lower().encode()).hexdigest()
-    # ExitStack closes the lock only after cleanup and the terminal receipt,
-    # including when either execution or final-state writing raises.
-    with ExitStack() as resources:
-        try:
-            lock = resources.enter_context((locks / (key + ".lock")).open("a+b"))
-            if lock.tell() == 0:
-                lock.write(b"0")
-                lock.flush()
-            while not stopped(job, request):
-                try:
-                    lock.seek(0)
-                    msvcrt.locking(lock.fileno(), msvcrt.LK_NBLCK, 1)
-                    break
-                except OSError:
-                    time.sleep(0.2)
-            else:
-                state["status"] = stopped(job, request)
-                return
-            verify_inputs(job, request)
-            native_job = WindowsJob()
-            with (job / "worker.log").open("ab") as log:
-                child = subprocess.Popen(
-                    [
-                        sys.executable,
-                        "-I",
-                        "-B",
-                        "-u",
-                        "-X",
-                        "utf8",
-                        str(Path(__file__).resolve()),
-                        "worker",
-                        "--job",
-                        str(job),
-                    ],
-                    stdout=log,
-                    stderr=log,
-                    cwd=str(job),
-                    creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
-                )
-                native_job.assign(child)
-                (job / "assigned").touch()
-                state.update(status="running", worker_pid=child.pid, started_at=time.time())
-                write(job / "state.json", state)
-                while child.poll() is None and not stopped(job, request):
-                    time.sleep(0.1)
-                outcome = stopped(job, request)
-                if outcome:
-                    native_job.terminate()
-                    child.wait(timeout=30)
-                    state["status"] = outcome
-                elif child.returncode == 0 and (job / "results.json").is_file():
-                    state.update(status="succeeded", results_sha256=sha(job / "results.json"))
-                else:
-                    detail = (job / "worker.log").read_text(encoding="utf-8", errors="replace")
-                    state.update(
-                        status="failed", return_code=child.returncode, error=detail[-2000:]
-                    )
-        except Exception as error:
-            state.update(status="failed", error=str(error))
-            traceback.print_exc()
-        finally:
-            if native_job:
-                try:
-                    native_job.terminate()
-                except Exception as error:
-                    state.update(status="interrupted", error="Stop unconfirmed: " + str(error))
-                finally:
-                    native_job.close()
-            if child and child.poll() is None:
-                try:
-                    child.kill()
-                    child.wait(timeout=30)
-                except Exception as error:
-                    state.update(status="interrupted", error="Stop unconfirmed: " + str(error))
-            state["finished_at"] = time.time()
-            write(job / "state.json", state)
+    return shared.supervise(job, _compat=_compatibility_hooks())
 
 
 def submit(job):
-    """Claim a launch once; record a known failure without leaving an ownerless queue."""
-    state = read(job / "state.json")
-    if state["status"] in TERMINAL:
-        return state
-    marker = job / "submitted"
-    try:
-        marker.open("x").close()
-    except FileExistsError:
-        return read(job / "state.json")
-    supervisor = None
-    try:
-        # Another submitter may have failed and released its marker after our
-        # first read. Recheck terminal state only after claiming this launch.
-        state = read(job / "state.json")
-        if state["status"] in TERMINAL:
-            marker.unlink()
-            return state
-        with (job / "supervisor.log").open("ab") as log:
-            supervisor = subprocess.Popen(
-                [
-                    sys.executable,
-                    "-I",
-                    "-B",
-                    "-X",
-                    "utf8",
-                    str(Path(__file__).resolve()),
-                    "supervise",
-                    "--job",
-                    str(job),
-                ],
-                stdin=subprocess.DEVNULL,
-                stdout=log,
-                stderr=log,
-                close_fds=True,
-                creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
-            )
-    except Exception as error:
-        if supervisor is not None:
-            # A failure after Popen returned does not mean the supervisor stopped.
-            # Preserve ownership; the coordinator's lost-reply path requests cancel.
-            raise
-        state.update(
-            status="failed",
-            error="Failed to start Windows supervisor: " + str(error),
-            finished_at=time.time(),
+    return shared.submit(job, _compat=_compatibility_hooks())
+
+
+def _compatibility_hooks():
+    from types import SimpleNamespace
+
+    return SimpleNamespace(
+        read=read,
+        write=write,
+        validate_request=validate_request,
+        verify_inputs=verify_inputs,
+        WindowsJob=WindowsJob,
+        entrypoint=Path(__file__).resolve(),
+        stopped=stopped,
+    )
+
+
+def describe():
+    parameters = {
+        "type": "object",
+        "maxProperties": 100,
+        "propertyNames": {"pattern": "^[A-Za-z][A-Za-z0-9_]{0,63}$"},
+        "additionalProperties": {"type": "number"},
+    }
+    results = {
+        "type": "array",
+        "minItems": 1,
+        "maxItems": 100,
+        "uniqueItems": True,
+        "items": {"type": "string", "maxLength": 1024, "pattern": r"^(1D Results|Tables)\\"},
+    }
+    return {
+        "application": "cst",
+        "project_suffixes": [".cst"],
+        "automation": "vendor Python API and VBA",
+        "session": "owned desktop process",
+        "operations": {
+            "magnetostatic.solve": {
+                "arguments_schema": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "required": ["parameters", "results"],
+                    "properties": {"parameters": parameters, "results": results},
+                },
+                "arguments": {
+                    "parameters": "finite numeric values in model units",
+                    "results": "explicit CST 0D/1D tree paths",
+                },
+            },
+            "project.python": {
+                "arguments_schema": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "required": ["parameters", "results", "script"],
+                    "properties": {
+                        "parameters": parameters,
+                        "results": dict(results, minItems=0),
+                        "script": {"const": "inputs/automation.py"},
+                    },
+                },
+                "arguments": {
+                    "parameters": "finite numeric model parameters",
+                    "results": "optional saved 0D/1D paths",
+                    "script": "inputs/automation.py",
+                },
+                "trusted_host_code": True,
+            },
+        },
+        "requirements": ["CST installation with Python automation libraries", "Windows Python"],
+        "qualification": (
+            "Original magnetostatic recipe tested with CST 2024.4; "
+            "shared runner and script operation require native commissioning"
+        ),
+    }
+
+
+def check(installation):
+    interface, _, handles = load_cst(installation)
+    result = {
+        "interfaces_loaded": True,
+        "python": sys.version.split()[0],
+        "platform": sys.platform,
+        "installation": installation,
+        "automation_available": hasattr(interface, "DesignEnvironment"),
+        "solver_tested": False,
+    }
+    del handles
+    return result
+
+
+def input_sources(project, script=None):
+    project = Path(project)
+    if project.suffix.lower() != ".cst" or not project.is_file():
+        raise ValueError("Supply an existing, self-contained .cst project")
+    sources = {"inputs/project.cst": project}
+    model = project.with_suffix("") / "Model"
+    if model.exists() or model.is_symlink():
+        sources["inputs/project/Model"] = model
+    if script is not None:
+        sources["inputs/automation.py"] = Path(script)
+    return sources
+
+
+def validate_job_root(project, root):
+    if root.is_relative_to(project.with_suffix("")):
+        raise ValueError("Keep the job root outside the source project's companion directory")
+
+
+def validate(operation, arguments, inputs):
+    if operation not in describe()["operations"] or not isinstance(arguments, dict):
+        raise ValueError("Unsupported CST operation or arguments")
+    fields = {"parameters", "results"}
+    if operation == "project.python":
+        fields.add("script")
+        if (
+            arguments.get("script") != "inputs/automation.py"
+            or "inputs/automation.py" not in inputs
+        ):
+            raise ValueError("Stage a native Python script as inputs/automation.py")
+    if set(arguments) != fields:
+        raise ValueError("Invalid CST operation arguments")
+    results = arguments["results"]
+    if operation == "project.python" and results == []:
+        results = ["1D Results\\validation-placeholder"]
+    # Reuse the existing native CST parameter/result language validation.
+    validate_request(
+        dict(
+            protocol=PROTOCOL,
+            installation="CST",
+            python="python.exe",
+            parameters=arguments["parameters"],
+            results=results,
+            timeout=1,
+            created_at=1,
+            solver="LF MStatic",
+            inputs=inputs,
+            runner_sha256="0" * 64,
+            python_sha256="0" * 64,
         )
-        write(job / "state.json", state)
-        marker.unlink()
-        return state
-    return read(job / "state.json")
+    )
+    if "inputs/project.cst" not in inputs:
+        raise ValueError("Missing CST project snapshot")
+    for name in inputs:
+        if name == "inputs/project.cst" or name.startswith("inputs/project/Model/"):
+            continue
+        if operation == "project.python" and name == "inputs/automation.py":
+            continue
+        raise ValueError("Unexpected CST input: " + name)
+
+
+def execute(job, request, context):
+    del context
+    arguments = request["arguments"]
+    native = dict(request, parameters=arguments["parameters"], results=arguments["results"])
+    return _execute_cst(job, native)
 
 
 def main():

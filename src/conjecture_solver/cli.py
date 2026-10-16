@@ -686,6 +686,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="simjecture")
     subcommands = parser.add_subparsers(dest="command", required=True)
 
+    from .windows import configure_parser as configure_windows
+
+    configure_windows(subcommands.add_parser(
+        "windows", help="Experimental common interface for Windows application adapters"
+    ))
+
     from .cst import configure_parser as configure_cst
 
     configure_cst(subcommands.add_parser(

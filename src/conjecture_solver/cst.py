@@ -6,13 +6,11 @@ import argparse
 import json
 import math
 import os
-import shutil
 import subprocess
-import time
-import uuid
 from pathlib import Path
 
-from . import cst_windows
+from . import cst_windows, windows, windows_runtime
+from .windows import WindowsBridge
 
 
 def linux_path(value):
@@ -46,7 +44,7 @@ def source_manifest(source):
     return files
 
 
-class CSTBridge:
+class CSTBridge(WindowsBridge):
     """Host-authorized execution only; receipts are permanently exploratory."""
 
     def __init__(self, installation=None, python=None):
@@ -64,35 +62,14 @@ class CSTBridge:
             raise ValueError("CST Python libraries were not found in this installation")
         if not self.python.is_file():
             raise ValueError("Specify a compatible Windows Python with --python")
-        self.runner = Path(cst_windows.__file__).resolve()
+        self.application = "cst"
+        self.runner = Path(windows_runtime.__file__).resolve()
 
-    def call(self, action, *args, timeout=60):
-        command = [
-            str(self.python),
-            "-I",
-            "-B",
-            "-X",
-            "utf8",
-            windows_path(self.runner),
-            action,
-            "--installation",
-            windows_path(self.installation),
-            *args,
-        ]
-        result = subprocess.run(
-            command, capture_output=True, text=True, timeout=timeout, check=False
-        )
-        if result.returncode:
-            raise RuntimeError("CST bridge failed: " + result.stderr.strip()[-4000:])
-        # CST's reader can print a notice before the response. The last JSON line
-        # is the protocol response; never treat a partial or failed call as success.
-        lines = result.stdout.splitlines()
-        if not lines:
-            raise RuntimeError("CST bridge returned no response")
-        payload = json.loads(lines[-1])
-        if payload.get("protocol") != cst_windows.PROTOCOL:
-            raise ValueError("Unexpected CST bridge protocol")
-        return payload
+    def _windows_path(self, value):
+        return windows_path(value)
+
+    def call(self, action, *args, timeout=60, runner=None):
+        return super().call(action, *args, timeout=timeout, runner=runner)
 
     def check(self):
         return self.call("check")
@@ -106,127 +83,25 @@ class CSTBridge:
         return self.call("inspect", *args)
 
     def submit(self, project, job_root, parameters, results, *, timeout=600):
-        source = linux_path(project)
-        root = linux_path(job_root)
-        if source.suffix.lower() != ".cst" or not source.is_file() or source.is_symlink():
-            raise ValueError("Supply an existing, self-contained .cst project")
+        source, root = linux_path(project), linux_path(job_root)
         if root.is_relative_to(source.with_suffix("")):
             raise ValueError("Keep the job root outside the source project's companion directory")
-        # CST itself works on a local Windows drive, not a Linux /tmp or UNC path.
-        win_root = windows_path(root)
-        if len(win_root) < 3 or win_root[1:3] != ":\\":
-            raise ValueError("Choose --job-root on a Windows drive mounted in WSL")
-        identifier = "cst_" + uuid.uuid4().hex
-        job = root / identifier
-        request = dict(
-            protocol=cst_windows.PROTOCOL,
-            installation=windows_path(self.installation),
-            python=windows_path(self.python),
-            parameters=parameters,
-            results=list(results),
-            timeout=timeout,
-            solver="LF MStatic",
-            inputs={"inputs/project.cst": "0" * 64},
-            created_at=time.time(),
-            runner_sha256=cst_windows.sha(self.runner),
-            python_sha256=cst_windows.sha(self.python),
+        return self.submit_application(
+            source, root, "magnetostatic.solve",
+            {"parameters": parameters, "results": list(results)}, timeout=timeout,
         )
-        cst_windows.validate_request(request)
-        job.mkdir(parents=True)
-        launch_attempted = False
-        try:
-            inputs = job / "inputs"
-            inputs.mkdir()
-            expected = source_manifest(source)
-            shutil.copyfile(source, inputs / "project.cst")
-            source_model = source.with_suffix("") / "Model"
-            if source_model.is_dir():
-                shutil.copytree(source_model, inputs / "project/Model")
-            request["inputs"] = {
-                path.relative_to(job).as_posix(): cst_windows.sha(path)
-                for path in sorted(inputs.rglob("*"))
-                if path.is_file()
-            }
-            if source_manifest(source) != expected or request["inputs"] != expected:
-                raise ValueError(
-                    "Source CST project or Model files changed during snapshotting; "
-                    "close CST and retry"
-                )
-            cst_windows.validate_request(request)
-            cst_windows.write(job / "request.json", request)
-            cst_windows.write(
-                job / "state.json",
-                dict(
-                    protocol=cst_windows.PROTOCOL,
-                    id=identifier,
-                    status="queued",
-                    created_at=request["created_at"],
-                    stage="exploration",
-                    evidence_eligible=False,
-                    execution_boundary="trusted-windows-process",
-                    solver_execution="local",
-                    request_sha256=cst_windows.sha(job / "request.json"),
-                ),
-            )
-            launch_attempted = True
-            self.call("submit", "--job", windows_path(job))
-        except Exception as error:
-            if launch_attempted:
-                # The Windows supervisor may have started even if its reply was
-                # lost. Do not overwrite its state or claim it has stopped.
-                (job / "cancel").touch()
-                raise RuntimeError(
-                    "CST submission reply was lost; cancellation requested. "
-                    "Check the job before retrying: " + str(job)
-                ) from error
-            cst_windows.write(
-                job / "state.json",
-                dict(
-                    protocol=cst_windows.PROTOCOL,
-                    id=identifier,
-                    status="failed",
-                    error="Submission failed; inspect the request and coordinator error",
-                    stage="exploration",
-                    evidence_eligible=False,
-                ),
-            )
-            raise
-        return status(job)
 
 
 def status(job):
-    job = linux_path(job)
-    state = cst_windows.read(job / "state.json")
-    state["directory"] = str(job)
-    if (
-        state["status"] == "succeeded"
-        and cst_windows.sha(job / "results.json") != state["results_sha256"]
-    ):
-        raise ValueError("Recorded CST results changed")
-    return state
+    return windows.status(job)
 
 
 def cancel(job):
-    job = linux_path(job)
-    state = status(job)
-    if state["status"] not in cst_windows.TERMINAL:
-        (job / "cancel").touch()
-        state["cancel_requested"] = True
-    return state
+    return windows.cancel(job)
 
 
 def wait(job, *, poll_seconds=0.2):
-    while True:
-        state = status(job)
-        if state["status"] in cst_windows.TERMINAL:
-            return state
-        request = cst_windows.read(linux_path(job) / "request.json")
-        if time.time() > request["created_at"] + request["timeout"] + 30:
-            raise RuntimeError(
-                "Windows supervisor has not reported a terminal state; stop is unconfirmed. "
-                "Inspect the Windows processes and supervisor.log."
-            )
-        time.sleep(poll_seconds)
+    return windows.wait(job, poll_seconds=poll_seconds)
 
 
 def parameters(values):
@@ -282,4 +157,4 @@ def main(args: argparse.Namespace):
                 timeout=args.timeout,
             )
     print(json.dumps(result, indent=2, allow_nan=False))
-    return 1 if result.get("status") in {"failed", "timed_out", "interrupted"} else 0
+    return windows.exit_code(args.cst_action, result)

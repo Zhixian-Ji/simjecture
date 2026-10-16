@@ -14,6 +14,13 @@ command to `simjecture cst`, install CST, or grant access outside an agent's hos
 permissions. Use the existing installation's Python/VBA help for exact APIs.
 The workflow has been exercised with CST 2024.4; recheck other releases.
 
+For a scripted edit through the shared runner, inspect
+`simjecture windows describe --application cst` and use its `project.python`
+operation. The supplied `project` is an owned working copy; record construction
+with its native API and write inspection results to the script's `result`
+dictionary. This is a general native-script operation, not a dedicated geometry
+command or a claim that the edited assembly has been validated.
+
 ## Inspect before choosing an edit
 
 - Establish the geometry units, project type, solver, shape names, materials,

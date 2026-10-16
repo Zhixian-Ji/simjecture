@@ -11,6 +11,7 @@ import pytest
 
 from conjecture_solver import cst
 from conjecture_solver import cst_windows as runner
+from conjecture_solver import windows as windows_client
 from conjecture_solver.agent_skills import research_skills
 from conjecture_solver.cli import build_parser
 
@@ -96,18 +97,21 @@ def test_submit_freezes_model_but_excludes_prior_results(bridge, tmp_path, monke
     old.mkdir()
     (old / "old-result.stx").write_text("not a fresh observation")
     calls = []
-    monkeypatch.setattr(bridge, "call", lambda *a: calls.append(a))
+    monkeypatch.setattr(bridge, "call", lambda *a, **kw: calls.append((a, kw)))
     state = bridge.submit(source, tmp_path / "jobs", {"r": 1.5}, [r"1D Results\L"])
     job = Path(state["directory"])
     cst_request = runner.read(job / "request.json")
-    assert cst_request["parameters"] == {"r": 1.5}
+    assert cst_request["arguments"]["parameters"] == {"r": 1.5}
+    assert cst_request["application"] == "cst"
+    assert cst_request["operation"] == "magnetostatic.solve"
     assert len(cst_request["inputs"]) == 2
     assert all("Result/" not in p for p in cst_request["inputs"])
     assert not (job / "work").exists()  # The Windows worker creates a separate writable copy.
     assert source.read_bytes() == b"operator project"
     assert (old / "old-result.stx").read_text() == "not a fresh observation"
     assert not state["evidence_eligible"] and state["stage"] == "exploration"
-    assert calls[0][0] == "submit"
+    assert calls[0][0][0] == "submit"
+    assert calls[0][1]["runner"] == job / "runtime/windows_runtime.py"
 
 
 def test_model_symlink_is_rejected_before_windows_submission(bridge, tmp_path, monkeypatch):
@@ -137,7 +141,7 @@ def test_lost_submit_reply_requests_cancel_without_falsifying_running_state(
     source.write_bytes(b"project")
     root = tmp_path / "jobs"
 
-    def lost(*args):
+    def lost(*args, **kwargs):
         job = next(root.iterdir())
         state = runner.read(job / "state.json")
         state["status"] = "running"
@@ -158,7 +162,9 @@ def test_windows_transport_uses_argv_and_rejects_failed_or_wrong_protocol(bridge
     def run(argv, **kwargs):
         observed.update(argv=argv, **kwargs)
         return SimpleNamespace(
-            returncode=0, stdout=json.dumps({"protocol": runner.PROTOCOL}), stderr=""
+            returncode=0,
+            stdout=json.dumps({"protocol": windows_client.runtime.PROTOCOL, "application": "cst"}),
+            stderr="",
         )
 
     monkeypatch.setattr(cst.subprocess, "run", run)
@@ -238,7 +244,7 @@ def test_job_root_cannot_recursively_copy_the_source_model(bridge, tmp_path):
 def test_wait_does_not_claim_a_stop_when_windows_supervisor_is_lost(tmp_path, monkeypatch):
     runner.write(tmp_path / "state.json", {"status": "running"})
     runner.write(tmp_path / "request.json", {"created_at": 1, "timeout": 1})
-    monkeypatch.setattr(cst.time, "time", lambda: 100)
+    monkeypatch.setattr(windows_client.time, "time", lambda: 100)
     with pytest.raises(RuntimeError, match="unconfirmed"):
         cst.wait(tmp_path)
     assert runner.read(tmp_path / "state.json")["status"] == "running"
@@ -339,16 +345,16 @@ def test_source_changes_are_rejected_before_launch(bridge, tmp_path, monkeypatch
     a, b = model / "a", model / "b"
     a.write_text("0")
     b.write_text("0")
-    copytree = cst.shutil.copytree
+    copytree = windows_client.shutil.copytree
 
     def changing_copy(src, dst):
         if change in {"mixed", "restored"}:
             # Enforce the interleaving: the copied (0, 1) never existed in source.
             dst.mkdir(parents=True)
-            cst.shutil.copyfile(a, dst / "a")
+            windows_client.shutil.copyfile(a, dst / "a")
             a.write_text("1")
             b.write_text("1")
-            cst.shutil.copyfile(b, dst / "b")
+            windows_client.shutil.copyfile(b, dst / "b")
             if change == "restored":
                 a.write_text("0")
                 b.write_text("0")
@@ -361,7 +367,7 @@ def test_source_changes_are_rejected_before_launch(bridge, tmp_path, monkeypatch
             else:
                 source.write_bytes(b"new project")
 
-    monkeypatch.setattr(cst.shutil, "copytree", changing_copy)
+    monkeypatch.setattr(windows_client.shutil, "copytree", changing_copy)
     monkeypatch.setattr(bridge, "call", lambda *a: pytest.fail("must not launch Windows"))
     with pytest.raises(ValueError, match="changed during snapshotting"):
         bridge.submit(source, tmp_path / "jobs", {"r": 2}, [r"1D Results\L"])

@@ -3,8 +3,10 @@
 The experimental `simjecture cst` bridge keeps Simjecture on WSL and uses native
 Windows Python to operate an existing CST Studio Suite installation. It can
 inspect saved 0D/1D results and submit self-contained **LF MStatic** projects with
-numeric parameter changes. Other solvers, remote Windows hosts, external input
-staging and direct evidence-stage `lab.run` integration are outside this version.
+numeric parameter changes. These commands now use the
+[shared Windows application runner](windows-applications.md), which also offers
+native CST Python scripts. Remote Windows hosts, external input staging and
+direct evidence-stage `lab.run` integration are outside this version.
 
 The operator supplies CST, a compatible Windows Python and the necessary solver
 authorization. Nothing downloads or redistributes CST. CST 2024 includes compatible
@@ -87,6 +89,9 @@ launch marker and follow the cancellation/reconciliation path.
 The source `.cst` and its complete companion `Model` file inventory are hashed
 before and after copying. Both inventories and the copied hashes must agree;
 changed, added or removed files cause submission to fail before a Windows launch.
+The worker also checks the complete queued snapshot and its writable copy before
+opening CST. Each new job freezes the shared runner and adapter source files so
+an update to the client package does not replace a queued job's runtime.
 Existing `Result`, `Temp`, `SP` and mesh-cache directories are not staged. The
 Windows worker deletes results in its writable project copy, sets finite numeric
 parameters, rebuilds and starts the magnetostatic solver. It saves the output and
@@ -143,18 +148,20 @@ effective settings in the working copy and solver logs.
 
 ## Regression checks
 
-The ordinary Linux suite (`pytest tests/test_cst.py`) exercises snapshot changes,
-local-solver enforcement, cleanup ordering and submission failure recovery without
-CST. Native Job Object and file-lock checks also run in CI on Windows Python 3.9
-and 3.12, without CST, a license or extra Python packages:
+The ordinary Linux suite (`pytest tests/test_cst.py tests/test_windows_applications.py`)
+exercises snapshot changes, local-solver enforcement, native-script dispatch,
+cleanup ordering and submission failure recovery without CST. Shared native
+Job Object, file-lock and fixture-adapter checks run in CI on Windows Python 3.9
+and 3.12, without vendor applications or extra Python packages:
 
 ```powershell
 python scripts/check_cst_windows.py
 ```
 
 From WSL, use Windows Python and Windows paths for the script. The optional
-`--runner PATH` selects an extracted wheel's standalone `cst_windows.py` for
-package validation. These process-boundary checks complement an actual model
+`--runner PATH` selects an extracted wheel's standalone `windows_runtime.py` for
+package validation; its sibling adapters must be present. The original
+`cst_windows.py` entrypoint has separate compatibility checks. These checks complement an actual model
 solve; they do not establish solver availability or numerical accuracy.
 
 ## Execution and scientific scope
