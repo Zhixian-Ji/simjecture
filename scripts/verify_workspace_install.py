@@ -6,6 +6,7 @@ import argparse
 import functools
 import json
 import os
+import shutil
 import signal
 import socket
 import subprocess
@@ -20,6 +21,12 @@ def verify(release, destination):
     destination.mkdir(parents=True, exist_ok=False)
     home = destination / "home"
     home.mkdir()
+    # Run outside the checkout: otherwise the installer discovers pyproject.toml
+    # above dist/install.sh and silently skips downloading/verifying the bundle.
+    bootstrap = destination / "bootstrap"
+    bootstrap.mkdir()
+    installer = bootstrap / "install.sh"
+    shutil.copyfile(release / "install.sh", installer)
     env = {
         "HOME": str(home),
         "PATH": "/usr/bin:/bin",
@@ -41,7 +48,14 @@ def verify(release, destination):
     ):
         if name in os.environ:
             env[name] = os.environ[name]
-    handler = functools.partial(SimpleHTTPRequestHandler, directory=str(release))
+    requested_assets = set()
+
+    class ReleaseHandler(SimpleHTTPRequestHandler):
+        def do_GET(self):
+            requested_assets.add(self.path)
+            super().do_GET()
+
+    handler = functools.partial(ReleaseHandler, directory=str(release))
     server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     env["SIMJECTURE_RELEASE_BASE"] = f"http://127.0.0.1:{server.server_port}"
@@ -49,7 +63,7 @@ def verify(release, destination):
     try:
         with (destination / "install.log").open("w") as log:
             subprocess.run(
-                ["bash", str(release / "install.sh"), "--no-start", "--no-system-packages"],
+                ["bash", str(installer), "--no-start", "--no-system-packages"],
                 env=env,
                 cwd=home,
                 stdout=log,
@@ -60,6 +74,10 @@ def verify(release, destination):
     finally:
         server.shutdown()
         server.server_close()
+    if "/SHA256SUMS" not in requested_assets or not any(
+        path.endswith("-workspace.tar.gz") for path in requested_assets
+    ):
+        raise RuntimeError("Installer did not download the workspace bundle and checksums")
     root = home / "simjecture"
     version = (root / ".current-version").read_text().strip()
     app = root / "app" / version
@@ -123,6 +141,7 @@ def verify(release, destination):
     result = dict(
         version=version,
         fresh_home=True,
+        downloaded_workspace_bundle=True,
         agent_or_api_key_required=False,
         system_package_changes=False,
         gui=True,

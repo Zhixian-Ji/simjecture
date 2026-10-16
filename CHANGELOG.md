@@ -4,6 +4,22 @@ This project follows semantic versioning. Dates use ISO 8601.
 
 ## Unreleased
 
+## 0.6.2 — 2026-10-16
+
+- Bring the 0.6.2 candidate series into the stable release: project/workspace
+  collections, director-controlled registration recovery and storage grants,
+  explicit experimental solver development, large-build handling and portable
+  LF shell scripts. Preserve existing study identities and scientific review gates.
+
+- Verify fresh-home installations through the downloaded workspace archive and
+  checksum rather than accidentally selecting the source checkout. Update the
+  locked DSH transitive MCP SDK and sharp dependencies to patched versions while
+  retaining the pinned DSH release.
+
+- Retry transient Windows receipt-replacement sharing errors for a bounded time,
+  preserving the previous complete receipt. Cover an actual Windows reader lock
+  and include supervisor/worker logs in failed native integration checks.
+
 - Add an experimental common Windows application interface with discovery,
   frozen per-job runner bundles, complete input inventories, asynchronous jobs,
   deadlines, cancellation, process ownership and verified output artifacts.
@@ -15,6 +31,15 @@ This project follows semantic versioning. Dates use ISO 8601.
   Ship a discoverable `cst-geometry` skill covering imported-solid edits, recorded
   history, full-profile comparisons and assembly checks through authorized native
   automation; native CST scripts use the generic Windows submission interface.
+  The contributor validated the shared runner on CST 2024.4 with fresh Two Coils
+  solves, native scripting, artifact verification and cancellation while preserving
+  the source model and an unrelated application session.
+
+- Park research workers while awaiting useful events, detect status polling that
+  conceals stalled progress, and make independent report assessment available
+  during research. Use compact, hashed artifact indexes in review packets and
+  expose native-agent accounting coverage. Preserve original scientific receipts
+  and distinguish accepted unresolved reports from accepted scientific claims.
 
 - Preserve autonomous-study tool selections across agent redrafting and restarts.
   Teach native agents to attach registered tools in study briefs, retain declared
