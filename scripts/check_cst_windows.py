@@ -14,6 +14,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import unittest
 from pathlib import Path
@@ -121,6 +122,51 @@ class NativeSupervisorTests(unittest.TestCase):
         if hold:
             command.append("--hold-worker")
         return command
+
+    def test_receipt_write_survives_a_native_windows_reader(self):
+        from ctypes import wintypes as w
+
+        kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel.CreateFileW.argtypes = [
+            w.LPCWSTR, w.DWORD, w.DWORD, ctypes.c_void_p, w.DWORD, w.DWORD, w.HANDLE
+        ]
+        kernel.CreateFileW.restype = w.HANDLE
+        kernel.CloseHandle.argtypes = [w.HANDLE]
+        path = self.job / "state.json"
+        original = RUNNER.read(path)
+        # FILE_SHARE_READ allows polling but deliberately denies replacement.
+        handle = kernel.CreateFileW(str(path), 0x80000000, 1, None, 3, 0, None)
+        if handle == w.HANDLE(-1).value:
+            raise ctypes.WinError(ctypes.get_last_error())
+        blocked = threading.Event()
+        errors = []
+        replace = os.replace
+
+        def observed_replace(*args):
+            try:
+                return replace(*args)
+            except OSError:
+                blocked.set()
+                raise
+
+        def save():
+            try:
+                RUNNER.write(path, {"status": "running"})
+            except Exception as error:
+                errors.append(error)
+
+        writer = threading.Thread(target=save, daemon=True)
+        with patch.object(os, "replace", observed_replace):
+            try:
+                writer.start()
+                self.assertTrue(blocked.wait(5), "Native sharing conflict was not exercised")
+                self.assertEqual(RUNNER.read(path), original)
+            finally:
+                kernel.CloseHandle(handle)
+                writer.join(timeout=10)
+        self.assertFalse(writer.is_alive())
+        self.assertEqual(errors, [])
+        self.assertEqual(RUNNER.read(path), {"status": "running"})
 
     def test_lock_covers_descendant_cleanup_and_terminal_receipt(self):
         real_popen, real_terminate, real_write = (
@@ -354,7 +400,16 @@ class NativeSupervisorTests(unittest.TestCase):
             if state["status"] in RUNNER.TERMINAL:
                 break
             time.sleep(0.05)
-        self.assertEqual(state["status"], "succeeded", state)
+        diagnostics = {"state": state}
+        if state["status"] != "succeeded":
+            for name in ("supervisor.log", "worker.log"):
+                path = self.job / name
+                diagnostics[name] = (
+                    path.read_text(encoding="utf-8", errors="replace")
+                    if path.exists()
+                    else "missing"
+                )
+        self.assertEqual(state["status"], "succeeded", diagnostics)
         while process_alive(state["supervisor_pid"]) and time.monotonic() < deadline:
             time.sleep(0.01)
         self.assertFalse(process_alive(state["supervisor_pid"]))

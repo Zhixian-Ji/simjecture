@@ -18,6 +18,56 @@ from conjecture_solver.agent_skills import research_skills
 from conjecture_solver.cli import build_parser
 
 
+@pytest.mark.parametrize("code", [5, 32, 33])
+def test_receipt_write_retries_windows_sharing_errors_without_losing_old_state(
+    tmp_path, monkeypatch, code
+):
+    path = tmp_path / "state.json"
+    runtime.write(path, {"status": "queued"})
+    replace = runtime.os.replace
+    attempts = []
+
+    def shared(source, destination):
+        attempts.append(destination)
+        if len(attempts) == 1:
+            assert runtime.read(path) == {"status": "queued"}
+            error = PermissionError("Windows reader holds the receipt")
+            error.winerror = code
+            raise error
+        return replace(source, destination)
+
+    monkeypatch.setattr(runtime.os, "replace", shared)
+    monkeypatch.setattr(runtime.time, "sleep", lambda _: None)
+    runtime.write(path, {"status": "running"})
+    assert len(attempts) == 2
+    assert runtime.read(path) == {"status": "running"}
+    assert not list(tmp_path.glob("*.tmp"))
+
+
+def test_receipt_write_preserves_permanent_errors_and_bounds_windows_retries(tmp_path, monkeypatch):
+    path = tmp_path / "state.json"
+    runtime.write(path, {"status": "queued"})
+    failure = PermissionError("Persistent access denial")
+    attempts = []
+
+    def denied(*_):
+        attempts.append(True)
+        raise failure
+
+    monkeypatch.setattr(runtime.os, "replace", denied)
+    with pytest.raises(PermissionError) as raised:
+        runtime.write(path, {"status": "running"})
+    assert raised.value is failure and len(attempts) == 1
+    failure.winerror = 5
+    clock = iter((0, 0, 5))
+    monkeypatch.setattr(runtime.time, "monotonic", lambda: next(clock))
+    monkeypatch.setattr(runtime.time, "sleep", lambda _: None)
+    with pytest.raises(PermissionError) as raised:
+        runtime.write(path, {"status": "running"})
+    assert raised.value is failure and len(attempts) == 3
+    assert runtime.read(path) == {"status": "queued"}
+
+
 @pytest.fixture
 def sealed_job(tmp_path):
     job = tmp_path / "job"

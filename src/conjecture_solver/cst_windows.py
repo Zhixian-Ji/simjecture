@@ -43,10 +43,7 @@ def read(path):
 
 
 def write(path, value):
-    path = Path(path)
-    temporary = path.with_name(path.name + "." + str(os.getpid()) + ".tmp")
-    temporary.write_text(json.dumps(value, indent=2, allow_nan=False) + "\n", encoding="utf-8")
-    os.replace(temporary, path)
+    return shared.write(path, value)
 
 
 def sha(path):

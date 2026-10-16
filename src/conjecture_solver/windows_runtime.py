@@ -35,7 +35,18 @@ def write(path, value):
     path = Path(path)
     temporary = path.with_name(path.name + "." + str(os.getpid()) + ".tmp")
     temporary.write_text(json.dumps(value, indent=2, allow_nan=False) + "\n", encoding="utf-8")
-    os.replace(temporary, path)
+    # Windows readers and antivirus scanners can briefly deny replacement even
+    # after the complete new receipt is closed. Keep the old receipt intact and
+    # bound retries so persistent access errors still fail explicitly.
+    deadline = time.monotonic() + 5
+    while True:
+        try:
+            os.replace(temporary, path)
+            return
+        except OSError as error:
+            if getattr(error, "winerror", None) not in (5, 32, 33) or time.monotonic() >= deadline:
+                raise
+            time.sleep(0.01)
 
 
 def sha(path):
