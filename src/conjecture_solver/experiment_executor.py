@@ -54,10 +54,11 @@ def _execute_frozen(
     from .research_service import sha
 
     workspace = Path(workspace)
-    registry = (
-        MVPCapabilityRegistry.discover(capabilities) if capabilities else MVPCapabilityRegistry()
-    )
     capability = binding.get("worker_capability", binding["capability"])
+    registry = (
+        MVPCapabilityRegistry.discover(capabilities, names=(capability,))
+        if capability and capabilities else MVPCapabilityRegistry()
+    )
     if capability and registry.get(capability).contract_hash != binding["runtime_sha256"]:
         raise ValueError("Runtime changed before execution")
     sandbox = BubblewrapSandbox(

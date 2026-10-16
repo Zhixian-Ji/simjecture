@@ -454,8 +454,9 @@ def test_connection_rotation_does_not_reuse_key_for_new_endpoint(tmp_path):
 
 
 @pytest.mark.parametrize("list_fields", [False, True])
+@pytest.mark.parametrize("selected_tools", [False, True])
 def test_detected_cli_uses_existing_transport_and_persists_brief(
-    tmp_path, monkeypatch, list_fields
+    tmp_path, monkeypatch, list_fields, selected_tools
 ):
     binary = tmp_path / "bin"
     binary.mkdir()
@@ -486,6 +487,9 @@ def test_detected_cli_uses_existing_transport_and_persists_brief(
     workspace = Workspace(tmp_path / "runs/.workspace")
     assert next(c for c in workspace.settings()["clis"] if c["id"] == "codex")["path"] == str(cli)
     project = workspace.create({"name": "CLI project"})
+    selected = str(tmp_path / "registered-tools") if selected_tools else "auto"
+    if selected_tools:
+        workspace.save_brief(project["id"], brief | {"capability_directory": selected})
     workspace.select_agent(
         project["id"], dict(backend="codex", model="fixture-cli", reasoning_effort="high")
     )
@@ -501,7 +505,7 @@ def test_detected_cli_uses_existing_transport_and_persists_brief(
         )
         assert result["messages"][-1]["content"] == "CLI preparation completed."
         assert result["brief"] == brief | {
-            "capability_directory": "",
+            "capability_directory": selected,
             "allow_solver_development": True,
         }
         assert (Path(result["files_directory"]) / "cli-result.txt").is_file()

@@ -524,6 +524,7 @@ def agent_tools(root, deadline, project=None, workspace=None):
             inherited_files: list[str] | None = None,
             machine_ids: list[str] | None = None,
             allow_solver_development: bool | None = None,
+            capability_directory: str | None = None,
         ) -> str:
             """Prepare an editable autonomous study brief for the user to launch.
             Preserve their objective. Ask about consequential missing information.
@@ -535,12 +536,16 @@ def agent_tools(root, deadline, project=None, workspace=None):
                 constraints: Fixed assumptions, allowed changes and required tools or inputs.
                 hours: Requested wall-time budget, between 0.01 and 168 hours.
                 completion_policy: answer accepts a negative result; repair seeks a tested repair.
-                instrument: Installed catalogue tool ID, e.g. warpx-cpu; empty for ordinary Python.
+                instrument: Optional required installed solver, e.g. warpx-cpu.
+                    Available tools remain automatic unless explicitly restricted.
                 inherited_files: Parent research-relative paths for a continuation.
                     Omit to preserve the existing selection.
                 machine_ids: Prepared execution worker IDs. Omit to preserve the current selection.
                 allow_solver_development: Allow private solver forks; defaults true for new studies.
                     Omit to preserve the user's current setting. Readiness is not evidence approval.
+                capability_directory: auto exposes all available installed tools (the default).
+                    Use a descriptor file/directory to restrict access, or an empty string for
+                    Python only. Omit to preserve the current access setting.
             """
             brief = workspace.save_brief(
                 project,
@@ -554,6 +559,8 @@ def agent_tools(root, deadline, project=None, workspace=None):
                     inherited_files=inherited_files,
                     machine_ids=machine_ids,
                     allow_solver_development=allow_solver_development,
+                    **({"capability_directory": capability_directory}
+                       if capability_directory is not None else {}),
                 ),
             )
             emit("brief", brief=brief)
@@ -836,7 +843,14 @@ def run_external(prompt, root, config, turn, workspace=None, *, wall_seconds=Non
         "question must be a text string; success_criteria and constraints may be "
         "text strings or lists of text strings, joined with blank lines on import. "
         "Each text field must fit within 20,000 characters after joining. This prepares "
-        "an editable brief; it does not launch a study. Existing project files are available."
+        "an editable brief; it does not launch a study. Existing project files are available. "
+        "New studies automatically receive all available installed tools; the agent chooses "
+        "the tools used for each experiment. Use instrument with its installed catalogue tool "
+        "or variant ID only when a solver is an explicit scientific requirement. "
+        "capability_directory='auto' exposes all available tools; a registered descriptor "
+        "file/directory restricts them, and an empty string selects Python only. "
+        "Omitted tool fields preserve the saved brief's access setting. "
+        "Include machine_ids when using prepared remote workers."
     )
     if workspace:
         prompt += (

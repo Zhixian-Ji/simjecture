@@ -75,6 +75,9 @@ else:
         if number == 2:
             config["model"] = "m2"
         assert run_external("Current request", root, config, turn, w) == "done"
+        task = (turn / "cli/turn/task.txt").read_text()
+        assert "instrument with its installed catalogue tool or variant ID" in task
+        assert "Omitted tool fields preserve" in task
         args = json.loads((root / "argv.json").read_text())
         assert (flag in args) == (number == 1)
     assert load_session(root.parent, config)["cursor"] == "session-m2"

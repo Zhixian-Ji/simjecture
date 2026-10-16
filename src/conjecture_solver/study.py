@@ -60,7 +60,10 @@ def configure_parser(parser):
         help="Parent research-relative file to copy as context",
     )
     parser.add_argument("--state-dir", type=Path)
-    parser.add_argument("--capabilities", type=Path)
+    parser.add_argument(
+        "--capabilities", type=Path, default=Path("auto"),
+        help="auto (default): all available tools; directory: restrict; none: Python only",
+    )
     parser.add_argument("--machine-registry", type=Path, help="Local/SSH worker registry directory")
     parser.add_argument(
         "--machine",
@@ -227,6 +230,30 @@ def _run(args):
     if saved_execution and requested_execution and saved_execution != requested_execution:
         raise ValueError("Execution backend is immutable on resume")
     args.execution_backend = requested_execution or saved_execution or "bubblewrap"
+    python_only = str(args.capabilities) == "none"
+    if str(args.capabilities) == "auto":
+        if existing_research:
+            args.capabilities = existing_research.get("capabilities")
+        elif getattr(args, "machine_ids", None):
+            args.capabilities = None
+        elif mode == "minimal":
+            import uuid
+
+            from .web.inventory import automatic_tool_paths, freeze_available_tools
+
+            paths = automatic_tool_paths()
+            parent_capabilities = read(getattr(args, "continue_from", None) / "research.json").get(
+                "capabilities"
+            ) if getattr(args, "continue_from", None) else None
+            if parent_capabilities:
+                paths.insert(0, parent_capabilities)
+            args.capabilities = freeze_available_tools(
+                paths, args.campaign.parent / ".simjecture-tools" / uuid.uuid4().hex,
+            )
+        else:
+            args.capabilities = None
+    elif python_only:
+        args.capabilities = None
     if not 0 < args.turn_seconds <= args.wall_seconds:
         raise ValueError("Require 0 < turn-seconds <= wall-seconds")
     # Validate inputs before materializing any study state.
@@ -299,7 +326,8 @@ def _run(args):
             if inherited_development is not None:
                 args.allow_solver_development = inherited_development
         hypothesis = hypothesis or prior.manifest["hypothesis"]
-        args.capabilities = args.capabilities or prior.manifest.get("capabilities")
+        if not python_only:
+            args.capabilities = args.capabilities or prior.manifest.get("capabilities")
     if mode == "minimal":
         if not (args.campaign / "research.json").exists() and hypothesis is None:
             raise ValueError("New study requires --hypothesis-file")
@@ -318,6 +346,8 @@ def _run(args):
                 if not (args.campaign / "research.json").exists()
                 else None,
                 allow_solver_development=args.allow_solver_development,
+                method_review_scope=existing_research.get("method_review_scope", "study")
+                if existing_research else "used_instruments",
             )
             if hypothesis is not None
             else ResearchService(args.campaign)
@@ -411,6 +441,8 @@ def _run(args):
             director_enabled=args.director_enabled,
             allow_solver_development=args.allow_solver_development,
             capability_directory=str(args.capabilities) if args.capabilities else None,
+            method_review_scope=supervisor.service.manifest.get("method_review_scope", "study")
+            if mode == "minimal" else "study",
             agent_executable=args.executable,
             provider_config=getattr(args, "provider_config", None),
             machine_registry=str(machine_registry) if machine_registry else None,

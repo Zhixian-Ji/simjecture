@@ -8,8 +8,13 @@ The resulting claim still needs a traceable chain of inputs and numerical checks
 
 ## Expose instruments and give the physical question
 
-Commission the required execution paths and give the study access to the relevant
-capability descriptors. Describe the question, domain and resource budget in the
+New studies expose all available installed tools by default. The agent chooses
+the tools each experiment needs. An advanced tool restriction is optional;
+headless studies use `--capabilities auto` by default, a descriptor directory
+for a restriction, or `--capabilities none` for Python only. Tools on prepared
+remote workers come from those workers' registered inventories.
+
+Commission the execution paths actually used. Describe the question, domain and resource budget in the
 brief. State an instrument requirement when it matters scientifically, but leave
 the experimental choices to the agent where possible.
 

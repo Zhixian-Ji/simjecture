@@ -395,7 +395,10 @@ Write source normally here. All recorded numerical experiments use the existing 
   scope="production" (default) qualifies the hypothesis measurement for evidence collection;
   it does not establish the hypothesis. Build on working anchors and change one component at a time.
   Exact operator requirements cannot be waived. lab.run defaults to stage='evidence',
-  which requires method approval when this study requires it, even for postprocessing.
+  which requires method approval for instrument-backed evidence or an explicit operator
+  methods requirement. Unused installed tools do not require qualification; ordinary Python
+  experiments do not acquire a methods gate merely because other tools are available.
+  An older study's frozen whole-study methods policy still applies after resume.
   Use lab.analyze('reader.py', inputs=['recorded-data.json'], outputs=['analysis.json'])
   to preserve frozen postprocessing, arithmetic checks and diagnostic receipts before
   method approval. These are exploration, never claim evidence. Link the source experiment

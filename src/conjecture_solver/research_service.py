@@ -145,13 +145,20 @@ class ResearchService(
         execution_pool=None,
         report_reserve_seconds=None,
         allow_solver_development=None,
+        method_review_scope=None,
     ):
         root = Path(root).resolve()
+        if method_review_scope not in {None, "study", "used_instruments"}:
+            raise ValueError("Unknown method review scope")
         if allow_solver_development is not None and type(allow_solver_development) is not bool:
             raise ValueError("Solver development permission must be a boolean")
         root.mkdir(parents=True, exist_ok=True)
         if (root / "research.json").exists():
             existing = cls(root)
+            if method_review_scope is not None and method_review_scope != existing.manifest.get(
+                "method_review_scope", "study"
+            ):
+                raise ValueError("Method review scope is immutable within a study")
             if allow_solver_development is not None and (
                 existing.solver_development_policy()["allowed"] != allow_solver_development
             ):
@@ -216,6 +223,7 @@ class ResearchService(
                 schema_version=3,
                 study_id=uuid.uuid4().hex,
                 methods_required=bool(registry.hashes or remote_capabilities),
+                method_review_scope=method_review_scope or "study",
                 workflow="minimal",
                 registration_policy=dict(director_can_tune=True),
                 completion_policy=completion_policy,
@@ -308,7 +316,9 @@ class ResearchService(
             if remote:
                 runtime = remote["runtime_sha256"]
             else:
-                registry = MVPCapabilityRegistry.discover(self.manifest["capabilities"])
+                registry = MVPCapabilityRegistry.discover(
+                    self.manifest["capabilities"], names=(capability,),
+                )
                 runtime = registry.get(capability).contract_hash
             if runtime != self.capability_hashes().get(capability):
                 raise ValueError("Capability identity changed since study creation")

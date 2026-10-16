@@ -159,3 +159,46 @@ def discover_installed(project_root, registered_paths=()):
         except (OSError, ValueError):
             continue
     return list(found.values())
+
+
+def freeze_available_tools(paths, directory):
+    """Give one study its own registry, keeping descriptor-relative paths intact."""
+    from ..mvp_skills import MVPCapabilityInstallation
+    from ..research_service import put
+
+    directory = Path(directory)
+    registry = directory / "capabilities"
+    registry.mkdir(parents=True, exist_ok=False)
+    installed, skipped, seen = {}, [], set()
+    for candidate in paths:
+        candidate = Path(candidate).expanduser()
+        descriptors = sorted(candidate.glob("*.json")) if candidate.is_dir() else [candidate]
+        for descriptor in descriptors:
+            source = descriptor.resolve()
+            if source in seen:
+                continue
+            seen.add(source)
+            try:
+                installation = MVPCapabilityInstallation.read(source)
+                name = installation.manifest.name
+                if name in installed:
+                    skipped.append(dict(path=str(source), reason="Duplicate instrument name"))
+                    continue
+                link = registry / f"{len(installed):04d}-{source.name}"
+                link.symlink_to(source)
+                installed[name] = dict(path=str(source), sha256=installation.contract_hash)
+            except (OSError, ValueError) as error:
+                skipped.append(dict(path=str(source), reason=str(error)))
+    put(directory / "inventory.json", dict(installed=installed, skipped=skipped))
+    return str(registry)
+
+
+def automatic_tool_paths():
+    """Use the same bounded installation discovery as the research-tools catalogue."""
+    from ..deployment import resolve_project_root
+
+    try:
+        root = resolve_project_root()
+    except FileNotFoundError:
+        root = Path.cwd()
+    return [item["path"] for item in discover_installed(root)]

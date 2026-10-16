@@ -821,13 +821,13 @@ function renderProject(force = false) {
     $("solver-development-help").textContent = hosted
       ? "Hosted policy: use supplied solver implementations. Experiment and analysis scripting remains available within host permissions."
       : "The agent may modify private solver forks. Reference installations stay protected; changed methods need independent qualification before claim evidence.";
+    const selectedTools = b.capability_directory ?? (hosted ? "hosted-tools" : "auto");
     if (
-      b.capability_directory &&
       [...$("study-tools").options].some(
-        (o) => o.value === b.capability_directory,
+        (o) => o.value === selectedTools,
       )
     )
-      $("study-tools").value = b.capability_directory;
+      $("study-tools").value = selectedTools;
   }
 }
 async function send() {
@@ -1243,11 +1243,12 @@ for(const id of ["close-custom-tool","cancel-custom-tool"])$(id).onclick=()=>$("
 $("tools-open-machines").onclick=()=>view("machines");
 async function refreshTools() {
   state.tools=await api("tools");
-  const previous=$("study-tools").value;$("study-tools").replaceChildren(new Option("Ordinary Python · no external solver",""));
+  const previous=$("study-tools").value;$("study-tools").replaceChildren(new Option("All available tools (default)","auto"),new Option("Python only · no external solver",""));
   const paths=new Set();
   for(const tool of state.tools){const variants=tool.variants?.length ? tool.variants : [tool];for(const item of variants)if(item.path && !paths.has(item.path)){paths.add(item.path);$("study-tools").add(new Option(item.label || item.name,item.path));}}
-  const desired=state.project?.brief?.capability_directory || previous;
-  $("study-tools").value=[...$("study-tools").options].some(o=>o.value===desired) ? desired : "";
+  const desired=state.project?.brief?.capability_directory ?? previous ?? "auto";
+  if(desired && ![...$("study-tools").options].some(o=>o.value===desired))$("study-tools").add(new Option("Saved tool restriction · check availability",desired));
+  $("study-tools").value=desired;
   if(hosted){$("study-tools").replaceChildren(new Option("All verified hosted tools","hosted-tools"));$("study-tools").disabled=true;}
   if(state.view!=="tools")return;
   $("connect-research-tool").disabled=state.readonly || hosted;

@@ -573,12 +573,20 @@ class MVPCapabilityRegistry:
         root: str | Path,
         *,
         ignore_unavailable: bool = False,
+        names: tuple[str, ...] | None = None,
     ) -> MVPCapabilityRegistry:
         config_root = Path(root).resolve()
         if not config_root.is_dir():
             return cls()
         installed: list[MVPCapabilityInstallation] = []
         for path in sorted(config_root.glob("*.json")):
+            if names is not None:
+                try:
+                    name = json.loads(path.read_text()).get("manifest", {}).get("name")
+                except (OSError, ValueError, AttributeError):
+                    continue
+                if name not in names:
+                    continue
             try:
                 installed.append(MVPCapabilityInstallation.read(path))
             except FileNotFoundError:

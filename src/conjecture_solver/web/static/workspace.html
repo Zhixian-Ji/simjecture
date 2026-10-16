@@ -720,12 +720,7 @@
                     </div>
                     <label class="research-director-option"><input id="solver-development" type="checkbox" checked /><span>Allow experimental solver development</span></label>
                     <p id="solver-development-help" class="field-help">The agent may modify private solver forks. Reference installations stay protected; changed methods need independent qualification before claim evidence.</p>
-                    <label for="study-tools">Research instruments</label
-                    ><select id="study-tools">
-                      <option value="">
-                        Ordinary Python · no external solver
-                      </option>
-                    </select>
+                    <p class="field-help">The agent can use all available installed tools and choose which ones each experiment needs.</p>
                       <label for="study-machines">Execution machines</label>
                       <select id="study-machines" multiple size="4">
                         <option value="" selected>This host · existing local launcher</option>
@@ -735,6 +730,11 @@
                         Worker profiles define their own experiment environment.</p>
                     <details class="advanced">
                       <summary>Execution settings</summary>
+                      <label for="study-tools">Tool access</label>
+                      <select id="study-tools">
+                        <option value="auto">All available tools (default)</option>
+                        <option value="">Python only · no external solver</option>
+                      </select>
                       <label class="research-director-option"><input id="research-director" type="checkbox" checked /><span>Research director · stop and replan expensive experiments</span></label>
                       <p class="field-help">Reviews strategy while jobs run, preserves partial data on stops, and asks the worker to acknowledge a new plan. Scientific claim review stays separate.</p>
                       <label for="review-model">Reviewer and director model (optional)</label>

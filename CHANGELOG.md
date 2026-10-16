@@ -10,6 +10,17 @@ This project follows semantic versioning. Dates use ISO 8601.
   recorded exploratory results. This does not expose CST through the Linux
   numerical sandbox or enable evidence-stage execution.
 
+- Preserve autonomous-study tool selections across agent redrafting and restarts.
+  Teach native agents to attach registered tools in study briefs, retain declared
+  instruments, and reject missing or mismatched declared tools before launch.
+  Explicitly selecting ordinary Python still clears a saved tool selection.
+
+- Give new studies all available installed tools by default across chat, browser,
+  CLI and terminal UI. Tool restrictions are an advanced option; solver requirements
+  are separate. Freeze each study's runtime inventory, keep remote tools on their
+  configured workers, and qualify the instruments actually used. Existing studies
+  retain their frozen inventories and methods policies on resume.
+
 - Extend active minimal studies from the workspace, experiment monitor, CLI or local
   operator API. Deadline changes are live, idempotent and recorded with their
   original budget; the director replans without restarting numerical jobs. Agents

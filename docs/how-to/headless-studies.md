@@ -55,6 +55,12 @@ An operator can [extend an active study](extend-study.md) without relaunching it
 `simjecture study extend --campaign ./runs/my-study --hours 12`.
 Use `simjecture study budget --campaign ./runs/my-study` for its current clock.
 
+New minimal studies expose all available installed tools by default. The agent
+selects the tool for each experiment. Use `--capabilities DIR` for a restricted
+registry or `--capabilities none` for Python only. Resume uses the existing
+frozen registry and does not rediscover installations. See
+[combining tools](multi-tool-studies.md) for qualification and handoffs.
+
 Mode, agent and numerical execution are separate choices:
 
 - `--backend` and `--model` choose the native agent and its configured model

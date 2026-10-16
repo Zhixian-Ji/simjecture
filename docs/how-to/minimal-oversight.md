@@ -4,9 +4,11 @@ Minimal mode keeps planning, native tools, search, coding and exploratory calcul
 with the worker. The host owns acceptance, provenance, deadlines and independent
 review. A successful numerical process is not a supported scientific result.
 
-New studies with installed capabilities require a short, source-bound methods review
-before recorded **evidence** runs. Existing studies keep their saved policy. Ordinary
-calculations without installed capabilities do not acquire a mandatory methods hierarchy.
+New studies expose all available installed tools. Evidence that uses a scientific
+instrument requires a short, source-bound methods review; unused tools require no
+qualification work. Ordinary Python calculations do not acquire this gate just
+because other tools are installed. An explicit operator requirement can require
+methods review for every evidence run. Existing studies keep their saved policy.
 
 ## Commission, review, collect evidence
 

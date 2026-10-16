@@ -5,6 +5,7 @@ from __future__ import annotations
 import shutil
 import sys
 import time
+import uuid
 from pathlib import Path
 from typing import Literal
 
@@ -22,6 +23,7 @@ from .study_status import read, supervisor_directory
 
 
 class NativeStudyRequest(MVPLaunchRequest):
+    capability_directory: str | None = "auto"
     execution_backend: Literal["bubblewrap", "proot-cooperative", "process-cooperative"] = (
         "bubblewrap"
     )
@@ -38,6 +40,7 @@ class NativeStudyRequest(MVPLaunchRequest):
     agent_executable: str | None = None
     machine_registry: str | None = None
     machine_ids: list[str] = []
+    method_review_scope: Literal["study", "used_instruments"] = "study"
 
 
 def materialize_native(request, *, resume=False):
@@ -67,6 +70,24 @@ def materialize_native(request, *, resume=False):
     if identity and process_identity_matches(identity):
         raise ResumeError("Study is already running; attach to its status")
     saved_request = existing.get("request", {})
+    if request.capability_directory == "auto":
+        from .web.inventory import automatic_tool_paths, freeze_available_tools
+
+        if existing:
+            capabilities = saved_request.get("capability_directory")
+        elif request.machine_ids:
+            capabilities = None  # Frozen workers advertise their own installed tools.
+        else:
+            capabilities = freeze_available_tools(
+                automatic_tool_paths(), root.parent / ".simjecture-tools" / uuid.uuid4().hex,
+            )
+        request = request.model_copy(update={
+            "capability_directory": capabilities,
+            "method_review_scope": saved_request.get("method_review_scope", "study")
+            if existing else "used_instruments",
+        })
+    elif request.capability_directory == "none":
+        request = request.model_copy(update={"capability_directory": None})
     if saved_request:
         if "director_enabled" not in saved_request:
             saved_request = saved_request | {"director_enabled": False}
@@ -112,6 +133,7 @@ def materialize_native(request, *, resume=False):
                 completion_policy=request.completion_policy,
                 execution_pool=pool,
                 allow_solver_development=request.allow_solver_development,
+                method_review_scope=request.method_review_scope,
             )
             service.freeze_protocol(protocol)
         else:

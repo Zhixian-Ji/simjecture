@@ -32,7 +32,9 @@ def registry_service(tmp_path, monkeypatch, *, allowed=True):
     hashes = {"reference": "old", "candidate": "new"}
     monkeypatch.setattr(
         "conjecture_solver.research_methods.MVPCapabilityRegistry.discover",
-        lambda p: SimpleNamespace(get=lambda name: SimpleNamespace(contract_hash=hashes[name])),
+        lambda p, *, names=None: SimpleNamespace(
+            get=lambda name: SimpleNamespace(contract_hash=hashes[name])
+        ),
     )
     (service.work / "calc.py").write_text("print(1)\n")
     monkeypatch.setattr(service, "_spawn_experiment", lambda record: None)

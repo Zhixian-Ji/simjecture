@@ -310,9 +310,10 @@ class NewRunScreen(Screen[None]):
             yield Input(value="512", id="max-workspace-mb", type="number")
             yield Label("Legacy memory limit (MB)", classes="form-label")
             yield Input(value="4096", id="max-memory-mb", type="number")
-            yield Label("Numerical instrument registry (optional)", classes="form-label")
+            yield Label("Tool access (advanced)", classes="form-label")
             yield Input(
-                placeholder="Capability manifest directory; blank = Python for minimal",
+                value="auto",
+                placeholder="auto = all available tools; directory = restrict; blank = Python only",
                 id="capability-directory",
             )
             yield Label("Capabilities discoverable on this host", classes="form-label")
@@ -423,6 +424,9 @@ class NewRunScreen(Screen[None]):
             error_widget.update("Cooperative execution requires a native study mode.")
             return None
         factory = MVPLaunchRequest if mode == "legacy" else NativeStudyRequest
+        capabilities = self.query_one("#capability-directory", Input).value.strip() or None
+        if mode == "legacy" and capabilities == "auto":
+            capabilities = None
         extra = (
             dict(engine="dsh" if backend == "dsh" else "native")
             if mode == "legacy"
@@ -437,8 +441,7 @@ class NewRunScreen(Screen[None]):
             **extra,
             hypothesis=hypothesis,
             instruction=instruction or None,
-            capability_directory=self.query_one("#capability-directory", Input).value.strip()
-            or None,
+            capability_directory=capabilities,
             campaign_id=campaign,
             output_directory=str(Path(output).expanduser()),
             max_wall_seconds=wall,
