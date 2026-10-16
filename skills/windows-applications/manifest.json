@@ -1,0 +1,8 @@
+{
+  "schema_version": "0.1.0",
+  "name": "windows-applications",
+  "version": "0.1.0",
+  "entrypoint": "SKILL.md",
+  "description": "Discover and operate the common Windows application job interface for installed CST and experimental SOLIDWORKS adapters through authorized host tools",
+  "capability_names": []
+}

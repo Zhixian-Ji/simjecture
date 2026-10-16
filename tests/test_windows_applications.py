@@ -14,6 +14,7 @@ import pytest
 from conjecture_solver import cst, windows
 from conjecture_solver import solidworks_windows as solidworks
 from conjecture_solver import windows_runtime as runtime
+from conjecture_solver.agent_skills import research_skills
 from conjecture_solver.cli import build_parser
 
 
@@ -174,6 +175,16 @@ def test_offline_discovery_and_cli_do_not_require_vendor_installations(capsys):
     assert json.loads(capsys.readouterr().out)["protocol"] == runtime.PROTOCOL
 
 
+def test_common_windows_skill_exposes_the_interface_and_current_adapter_limits():
+    catalogue = research_skills()
+    assert "windows-applications" in catalogue
+    content = catalogue.read("windows-applications", "SKILL.md", max_chars=32000)["content"]
+    assert "simjecture windows describe" in content
+    assert "dimensions_si" in content and "project.python" in content
+    assert "COMSOL is a future adapter" in content
+    assert "evidence_eligible=false" in content
+
+
 @pytest.mark.parametrize("command", ["cst", "windows"])
 def test_cancelled_wait_exits_nonzero_but_cancel_request_succeeds(tmp_path, command, capsys):
     runtime.write(tmp_path / "state.json", {"status": "cancelled"})
@@ -237,6 +248,22 @@ def test_new_companion_model_directory_is_detected_during_snapshot(tmp_path, mon
         bridge.submit(source, tmp_path / "jobs", {}, ["1D Results\\L"])
     job = next((tmp_path / "jobs").iterdir())
     assert runtime.read(job / "state.json")["status"] == "failed"
+
+
+def test_windows_containment_checks_ignore_path_case_before_copying(tmp_path, monkeypatch):
+    installation = tmp_path / "CST"
+    (installation / "AMD64/python_cst_libraries").mkdir(parents=True)
+    python = installation / "python.exe"
+    python.write_bytes(b"Windows interpreter")
+    source = tmp_path / "Project.cst"
+    source.write_bytes(b"project")
+    # These spellings name the same companion directory on Windows.
+    root = tmp_path / "PROJECT/Model/jobs"
+    monkeypatch.setattr(cst, "windows_path", lambda p: "C:\\" + str(p).lstrip("/"))
+    bridge = cst.CSTBridge(installation, python)
+    with pytest.raises(ValueError, match="outside.*companion"):
+        bridge.submit(source, root, {}, ["1D Results\\L"])
+    assert not root.exists()
 
 
 @pytest.mark.parametrize("bom", [False, True])

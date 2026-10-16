@@ -329,6 +329,7 @@ def test_worker_uses_copy_and_rejects_results_from_other_parameters(
         output = runner.read(tmp_path / "results.json")
         assert output["stage"] == "exploration" and not output["evidence_eligible"]
         assert output["solver_execution"] == "local"
+        assert output["runtime"]["version"] == "test CST fixture"
     assert source.read_bytes() == b"preserve input"
     assert (tmp_path / "work/project.cst").read_bytes() == b"preserve input"
     assert "DeleteResults" in commands[0]

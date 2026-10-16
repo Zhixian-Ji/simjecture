@@ -41,6 +41,10 @@ simjecture windows check --application cst \
   --python '/mnt/c/Program Files (x86)/CST Studio Suite 2024/Opera/code/bin/python.exe'
 ```
 
+Native agents can read the `windows-applications` skill. API agents can discover
+and read it with `read_skill(name="windows-applications")`; this supplies interface
+guidance and does not grant Windows host execution permissions.
+
 The common submission form selects an application and an operation. Arguments
 are a JSON object validated by that adapter before a job is allocated:
 

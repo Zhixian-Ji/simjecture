@@ -315,6 +315,7 @@ def worker(job):
     os.chdir(job / "work")
     data = _execute_cst(job, request)
     verify_inputs(job, request)
+    data["runtime"] = data.pop("cst_runtime")
     data.update(
         stage="exploration",
         evidence_eligible=False,

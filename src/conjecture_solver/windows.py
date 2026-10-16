@@ -8,7 +8,7 @@ import shutil
 import subprocess
 import time
 import uuid
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 from . import windows_runtime as runtime
 
@@ -98,15 +98,18 @@ class WindowsBridge:
         source = linux_path(project)
         root = linux_path(job_root)
         application = runtime.adapter(self.application)
-        if hasattr(application, "validate_job_root"):
-            application.validate_job_root(source, root)
         sources = application.input_sources(source, linux_path(script) if script else None)
-        for path in sources.values():
-            if path.is_dir() and root.is_relative_to(path):
-                raise ValueError("Keep the job root outside the source input directories")
         win_root = self._windows_path(root)
         if len(win_root) < 3 or win_root[1:3] != ":\\":
             raise ValueError("Choose --job-root on a Windows drive mounted in WSL")
+        windows_root = PureWindowsPath(win_root)
+        if hasattr(application, "validate_job_root"):
+            application.validate_job_root(PureWindowsPath(self._windows_path(source)), windows_root)
+        for path in sources.values():
+            if path.is_dir() and windows_root.is_relative_to(
+                PureWindowsPath(self._windows_path(path))
+            ):
+                raise ValueError("Keep the job root outside the source input directories")
         # Validate the complete task before allocating its directory or launching.
         expected = self._sources_manifest(sources)
         native_root = self.runner.parent
