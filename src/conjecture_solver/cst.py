@@ -27,6 +27,25 @@ def windows_path(value):
     return subprocess.check_output(["wslpath", "-w", str(Path(value).resolve())], text=True).strip()
 
 
+def source_manifest(source):
+    """Hash the complete source inventory; callers must keep the project quiescent."""
+    files = {"inputs/project.cst": cst_windows.sha(source)}
+    model = source.with_suffix("") / "Model"
+    if model.is_symlink():
+        raise ValueError("CST model inputs must not contain symlinks")
+    if model.exists() and not model.is_dir():
+        raise ValueError("CST Model must be a directory")
+    for path in sorted(model.rglob("*")):
+        if path.is_symlink():
+            raise ValueError("CST model inputs must not contain symlinks")
+        if path.is_file():
+            relative = "inputs/project/Model/" + path.relative_to(model).as_posix()
+            files[relative] = cst_windows.sha(path)
+        elif not path.is_dir():
+            raise ValueError("CST model inputs must be regular files or directories")
+    return files
+
+
 class CSTBridge:
     """Host-authorized execution only; receipts are permanently exploratory."""
 
@@ -118,22 +137,21 @@ class CSTBridge:
         try:
             inputs = job / "inputs"
             inputs.mkdir()
+            expected = source_manifest(source)
             shutil.copyfile(source, inputs / "project.cst")
             source_model = source.with_suffix("") / "Model"
-            if source_model.is_symlink():
-                raise ValueError("CST model inputs must not contain symlinks")
             if source_model.is_dir():
-                for path in source_model.rglob("*"):
-                    if path.is_symlink():
-                        raise ValueError("CST model inputs must not contain symlinks")
                 shutil.copytree(source_model, inputs / "project/Model")
             request["inputs"] = {
                 path.relative_to(job).as_posix(): cst_windows.sha(path)
                 for path in sorted(inputs.rglob("*"))
                 if path.is_file()
             }
-            if cst_windows.sha(source) != request["inputs"]["inputs/project.cst"]:
-                raise ValueError("Source CST project changed during snapshotting; save and retry")
+            if source_manifest(source) != expected or request["inputs"] != expected:
+                raise ValueError(
+                    "Source CST project or Model files changed during snapshotting; "
+                    "close CST and retry"
+                )
             cst_windows.validate_request(request)
             cst_windows.write(job / "request.json", request)
             cst_windows.write(
@@ -146,6 +164,7 @@ class CSTBridge:
                     stage="exploration",
                     evidence_eligible=False,
                     execution_boundary="trusted-windows-process",
+                    solver_execution="local",
                     request_sha256=cst_windows.sha(job / "request.json"),
                 ),
             )

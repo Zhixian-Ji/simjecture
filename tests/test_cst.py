@@ -3,6 +3,7 @@
 import copy
 import hashlib
 import json
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -260,8 +261,9 @@ def test_elevation_error_is_actionable_and_never_retries_with_runas(monkeypatch,
 
 
 @pytest.mark.parametrize("observed_r", [2.0, 1.0])
+@pytest.mark.parametrize("local_setting_error", [False, True])
 def test_worker_uses_copy_and_rejects_results_from_other_parameters(
-    tmp_path, cst_request, monkeypatch, observed_r
+    tmp_path, cst_request, monkeypatch, observed_r, local_setting_error
 ):
     (tmp_path / "inputs").mkdir()
     source = tmp_path / "inputs/project.cst"
@@ -269,8 +271,23 @@ def test_worker_uses_copy_and_rejects_results_from_other_parameters(
     runner.write(tmp_path / "request.json", cst_request)
     (tmp_path / "assigned").touch()
     commands = []
+    solver = {"distributed": True, "started": False, "closed": False}
+
+    def execute(code):
+        commands.append(code)
+        for line in code.splitlines():
+            if "Rebuild()" in line:
+                solver["distributed"] = True  # History restores the project's DC setting.
+            if "UseDistributedComputing False" in line:
+                if local_setting_error:
+                    raise RuntimeError("Local execution setting failed")
+                solver["distributed"] = False
+            if "MStaticSolver.Start" in line:
+                assert not solver["distributed"], "A distributed solve escaped the Windows job"
+                solver["started"] = True
+
     project = SimpleNamespace(
-        schematic=SimpleNamespace(execute_vba_code=commands.append),
+        schematic=SimpleNamespace(execute_vba_code=execute),
         save=lambda: None,
         close=lambda: None,
     )
@@ -279,7 +296,7 @@ def test_worker_uses_copy_and_rejects_results_from_other_parameters(
         version=lambda: "test CST fixture",
         set_quiet_mode=lambda _: None,
         open_project=lambda _: project,
-        close=lambda: None,
+        close=lambda: solver.update(closed=True),
     )
     monkeypatch.setattr(runner, "load_cst", lambda _: (None, None, []))
     monkeypatch.setattr(runner, "launch_frontend", lambda *a: environment)
@@ -292,7 +309,12 @@ def test_worker_uses_copy_and_rejects_results_from_other_parameters(
             "results": {"test L": [{"parameters": {"r": observed_r}, "y": 0.001}]},
         },
     )
-    if observed_r != 2:
+    if local_setting_error:
+        with pytest.raises(RuntimeError, match="Local execution setting failed"):
+            runner.worker(tmp_path)
+        assert not solver["started"]
+        assert not (tmp_path / "results.json").exists()
+    elif observed_r != 2:
         with pytest.raises(ValueError, match="parameters differ"):
             runner.worker(tmp_path)
         assert not (tmp_path / "results.json").exists()
@@ -300,7 +322,286 @@ def test_worker_uses_copy_and_rejects_results_from_other_parameters(
         runner.worker(tmp_path)
         output = runner.read(tmp_path / "results.json")
         assert output["stage"] == "exploration" and not output["evidence_eligible"]
+        assert output["solver_execution"] == "local"
     assert source.read_bytes() == b"preserve input"
     assert (tmp_path / "work/project.cst").read_bytes() == b"preserve input"
     assert "DeleteResults" in commands[0]
     assert "MStaticSolver.Start <> 0" in commands[1]
+    assert solver["closed"]
+
+
+@pytest.mark.parametrize("change", ["mixed", "restored", "added", "removed", "container"])
+def test_source_changes_are_rejected_before_launch(bridge, tmp_path, monkeypatch, change):
+    source = tmp_path / "project.cst"
+    source.write_bytes(b"saved project")
+    model = source.with_suffix("") / "Model"
+    model.mkdir(parents=True)
+    a, b = model / "a", model / "b"
+    a.write_text("0")
+    b.write_text("0")
+    copytree = cst.shutil.copytree
+
+    def changing_copy(src, dst):
+        if change in {"mixed", "restored"}:
+            # Enforce the interleaving: the copied (0, 1) never existed in source.
+            dst.mkdir(parents=True)
+            cst.shutil.copyfile(a, dst / "a")
+            a.write_text("1")
+            b.write_text("1")
+            cst.shutil.copyfile(b, dst / "b")
+            if change == "restored":
+                a.write_text("0")
+                b.write_text("0")
+        else:
+            copytree(src, dst)
+            if change == "added":
+                (model / "new").write_text("new input")
+            elif change == "removed":
+                b.unlink()
+            else:
+                source.write_bytes(b"new project")
+
+    monkeypatch.setattr(cst.shutil, "copytree", changing_copy)
+    monkeypatch.setattr(bridge, "call", lambda *a: pytest.fail("must not launch Windows"))
+    with pytest.raises(ValueError, match="changed during snapshotting"):
+        bridge.submit(source, tmp_path / "jobs", {"r": 2}, [r"1D Results\L"])
+    job = next((tmp_path / "jobs").iterdir())
+    assert runner.read(job / "state.json")["status"] == "failed"
+    assert not (job / "submitted").exists()
+
+
+@pytest.fixture
+def windows_process_flags(monkeypatch):
+    monkeypatch.setattr(runner.subprocess, "CREATE_NEW_PROCESS_GROUP", 0, raising=False)
+    monkeypatch.setattr(runner.subprocess, "DETACHED_PROCESS", 0, raising=False)
+
+
+@pytest.fixture
+def supervisor_case(tmp_path, cst_request, monkeypatch, windows_process_flags):
+    """Exercise real supervisor control flow without importing Windows/CST libraries."""
+    job = tmp_path / "job"
+    job.mkdir()
+    runner.write(job / "request.json", cst_request)
+    runner.write(job / "state.json", {"protocol": runner.PROTOCOL, "status": "queued"})
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "profile"))
+    monkeypatch.setitem(sys.modules, "msvcrt", SimpleNamespace(LK_NBLCK=1, locking=lambda *a: None))
+    now = [cst_request["created_at"] + 1]
+    monkeypatch.setattr(runner.time, "time", lambda: now[0])
+    original_open, original_write = Path.open, runner.write
+    locks, events = [], []
+
+    def tracked_open(path, *args, **kwargs):
+        handle = original_open(path, *args, **kwargs)
+        if path.suffix == ".lock":
+            locks.append(handle)
+        return handle
+
+    monkeypatch.setattr(Path, "open", tracked_open)
+
+    def held():
+        assert locks and not locks[-1].closed, "Installation lock released before cleanup"
+
+    def run(outcome, *, cleanup_error=False, write_error=False):
+        assigned = [False]
+
+        class Child:
+            pid = 42
+            returncode = 0 if outcome == "success" else 1
+
+            def poll(self):
+                if self.returncode is None:
+                    if outcome == "cancel":
+                        (job / "cancel").touch()
+                    elif outcome == "timeout":
+                        now[0] = cst_request["created_at"] + cst_request["timeout"] + 1
+                return self.returncode
+
+            def kill(self):
+                held()
+                events.append("kill")
+                self.returncode = -9
+
+            def wait(self, timeout):
+                held()
+                return self.returncode
+
+        child = Child()
+        if outcome in {"cancel", "timeout", "assign_error"}:
+            child.returncode = None
+
+        class NativeJob:
+            def assign(self, process):
+                held()
+                if outcome == "assign_error":
+                    raise OSError("Assignment failed")
+                assigned[0] = True
+
+            def terminate(self):
+                held()
+                events.append("terminate")
+                if cleanup_error:
+                    raise OSError("Cannot confirm native termination")
+                if assigned[0] and child.returncode is None:
+                    child.returncode = -15
+
+            def close(self):
+                held()
+                events.append("close")
+
+        def launch(*args, **kwargs):
+            if outcome == "spawn_error":
+                raise OSError("Worker creation failed")
+            return child
+
+        def verify(*args):
+            if outcome == "verify_error":
+                raise ValueError("Input mismatch")
+
+        def write(path, value):
+            if path == job / "state.json" and "finished_at" in value:
+                held()
+                events.append("terminal")
+                if write_error:
+                    raise OSError("Receipt drive unavailable")
+            return original_write(path, value)
+
+        if outcome == "success":
+            original_write(job / "results.json", {"fresh": True})
+        monkeypatch.setattr(runner, "WindowsJob", NativeJob)
+        monkeypatch.setattr(runner.subprocess, "Popen", launch)
+        monkeypatch.setattr(runner, "verify_inputs", verify)
+        monkeypatch.setattr(runner, "write", write)
+        runner.supervise(job)
+        return runner.read(job / "state.json")
+
+    return SimpleNamespace(run=run, locks=locks, events=events)
+
+
+@pytest.mark.parametrize(
+    "outcome,expected",
+    [
+        ("success", "succeeded"),
+        ("failure", "failed"),
+        ("cancel", "cancelled"),
+        ("timeout", "timed_out"),
+        ("assign_error", "failed"),
+        ("spawn_error", "failed"),
+        ("verify_error", "failed"),
+    ],
+)
+def test_supervisor_holds_lock_through_cleanup_and_receipt(supervisor_case, outcome, expected):
+    state = supervisor_case.run(outcome)
+    assert state["status"] == expected
+    assert supervisor_case.events[-1] == "terminal"
+    assert all(handle.closed for handle in supervisor_case.locks)
+
+
+def test_cleanup_failure_is_unconfirmed_under_the_lock(supervisor_case):
+    state = supervisor_case.run("failure", cleanup_error=True)
+    assert state["status"] == "interrupted" and "Stop unconfirmed" in state["error"]
+    assert supervisor_case.events == ["terminate", "close", "terminal"]
+    assert all(handle.closed for handle in supervisor_case.locks)
+
+
+def test_receipt_write_failure_still_releases_installation_lock(supervisor_case):
+    with pytest.raises(OSError, match="Receipt drive unavailable"):
+        supervisor_case.run("failure", write_error=True)
+    assert supervisor_case.events == ["terminate", "close", "terminal"]
+    assert all(handle.closed for handle in supervisor_case.locks)
+
+
+@pytest.mark.parametrize("failure", ["process", "log"])
+def test_supervisor_creation_failure_records_a_terminal_receipt(
+    tmp_path, monkeypatch, windows_process_flags, failure
+):
+    runner.write(tmp_path / "state.json", {"protocol": runner.PROTOCOL, "status": "queued"})
+    attempts = []
+
+    def fail(*args, **kwargs):
+        attempts.append(1)
+        raise OSError("CreateProcess failed")
+
+    monkeypatch.setattr(runner.subprocess, "Popen", fail)
+    if failure == "log":
+        original_open = Path.open
+
+        def open_log(path, *args, **kwargs):
+            if path.name == "supervisor.log":
+                raise OSError("CreateProcess failed: log unavailable")
+            return original_open(path, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "open", open_log)
+    state = runner.submit(tmp_path)
+    assert state["status"] == "failed" and "CreateProcess failed" in state["error"]
+    assert "finished_at" in state and "supervisor_pid" not in state
+    assert runner.read(tmp_path / "state.json") == state
+    assert not (tmp_path / "submitted").exists()
+    # A terminal failed job is immutable; an operator retry gets a new job ID.
+    assert runner.submit(tmp_path) == state
+    assert len(attempts) == (1 if failure == "process" else 0)
+
+
+def test_launch_claim_rechecks_a_concurrently_failed_receipt(
+    tmp_path, monkeypatch, windows_process_flags
+):
+    failed = {"protocol": runner.PROTOCOL, "status": "failed", "error": "Other launch failed"}
+    runner.write(tmp_path / "state.json", failed)
+    original_read = runner.read
+    reads = []
+
+    def stale_first_read(path):
+        reads.append(path)
+        if len(reads) == 1:
+            return {"protocol": runner.PROTOCOL, "status": "queued"}
+        return original_read(path)
+
+    monkeypatch.setattr(runner, "read", stale_first_read)
+    monkeypatch.setattr(
+        runner.subprocess, "Popen", lambda *a, **kw: pytest.fail("must not relaunch")
+    )
+    assert runner.submit(tmp_path) == failed
+    assert not (tmp_path / "submitted").exists()
+
+
+def test_duplicate_submit_does_not_start_another_supervisor(
+    tmp_path, monkeypatch, windows_process_flags
+):
+    runner.write(tmp_path / "state.json", {"protocol": runner.PROTOCOL, "status": "queued"})
+    launches = []
+
+    def launch(*args, **kwargs):
+        launches.append(args)
+        return SimpleNamespace(pid=42)
+
+    monkeypatch.setattr(runner.subprocess, "Popen", launch)
+    assert runner.submit(tmp_path)["status"] == "queued"
+    assert runner.submit(tmp_path)["status"] == "queued"
+    assert len(launches) == 1 and (tmp_path / "submitted").exists()
+
+
+def test_failure_after_supervisor_started_preserves_ownership(
+    tmp_path, monkeypatch, windows_process_flags
+):
+    runner.write(tmp_path / "state.json", {"protocol": runner.PROTOCOL, "status": "queued"})
+    original_open = Path.open
+
+    class BrokenLogClose:
+        def __enter__(self):
+            self.handle = original_open(tmp_path / "supervisor.log", "ab")
+            return self.handle
+
+        def __exit__(self, *args):
+            self.handle.close()
+            raise OSError("Log close failed after launch")
+
+    def open_log(path, *args, **kwargs):
+        if path.name == "supervisor.log":
+            return BrokenLogClose()
+        return original_open(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", open_log)
+    monkeypatch.setattr(runner.subprocess, "Popen", lambda *a, **kw: SimpleNamespace(pid=42))
+    with pytest.raises(OSError, match="after launch"):
+        runner.submit(tmp_path)
+    assert (tmp_path / "submitted").exists()
+    assert runner.read(tmp_path / "state.json")["status"] == "queued"

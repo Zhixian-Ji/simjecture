@@ -6,9 +6,10 @@ This project follows semantic versioning. Dates use ISO 8601.
 
 - Add an experimental operator-side WSL bridge to an existing Windows CST
   installation: inspect saved 0D/1D results and submit parameterized magnetostatic
-  jobs with independent working copies, Windows process cleanup, deadlines and
-  recorded exploratory results. This does not expose CST through the Linux
-  numerical sandbox or enable evidence-stage execution.
+  jobs with verified source snapshots, forced local execution, serialized Windows
+  process cleanup, deadlines and terminal launch-failure receipts. Add Linux
+  regression coverage and native Windows boundary checks without CST. This does
+  not expose CST through the Linux numerical sandbox or enable evidence-stage execution.
 
 - Preserve autonomous-study tool selections across agent redrafting and restarts.
   Teach native agents to attach registered tools in study briefs, retain declared

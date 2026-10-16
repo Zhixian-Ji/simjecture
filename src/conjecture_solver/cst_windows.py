@@ -18,6 +18,7 @@ import subprocess
 import sys
 import time
 import traceback
+from contextlib import ExitStack
 from pathlib import Path
 
 TERMINAL = {"succeeded", "failed", "cancelled", "timed_out", "interrupted"}
@@ -351,8 +352,11 @@ def worker(job):
         print("Starting magnetostatic solver", flush=True)
         # Invoke this solver explicitly. A saved example may select a parameter
         # sweep as its active top-level task; that must not replay other cases.
+        # Rebuild can restore distributed settings from history. Override them
+        # here, immediately before Start: remote/DC services are outside our job.
         project.schematic.execute_vba_code(
-            "Sub Main()\nIf MStaticSolver.Start <> 0 Then "
+            "Sub Main()\nMStaticSolver.UseDistributedComputing False\n"
+            "If MStaticSolver.Start <> 0 Then "
             'Err.Raise 1003, "Simjecture", "Magnetostatic solver failed"\nEnd Sub'
         )
         print("Saving fresh results", flush=True)
@@ -375,6 +379,7 @@ def worker(job):
         stage="exploration",
         evidence_eligible=False,
         execution_boundary="trusted-windows-process",
+        solver_execution="local",
         parameters=request["parameters"],
         inputs=request["inputs"],
         runtime=read(job / "cst-process.json"),
@@ -406,8 +411,11 @@ def supervise(job):
     locks = Path(os.environ["LOCALAPPDATA"]) / "Simjecture/cst-locks"
     locks.mkdir(parents=True, exist_ok=True)
     key = hashlib.sha256(request["installation"].lower().encode()).hexdigest()
-    try:
-        with (locks / (key + ".lock")).open("a+b") as lock:
+    # ExitStack closes the lock only after cleanup and the terminal receipt,
+    # including when either execution or final-state writing raises.
+    with ExitStack() as resources:
+        try:
+            lock = resources.enter_context((locks / (key + ".lock")).open("a+b"))
             if lock.tell() == 0:
                 lock.write(b"0")
                 lock.flush()
@@ -460,22 +468,78 @@ def supervise(job):
                     state.update(
                         status="failed", return_code=child.returncode, error=detail[-2000:]
                     )
+        except Exception as error:
+            state.update(status="failed", error=str(error))
+            traceback.print_exc()
+        finally:
+            if native_job:
+                try:
+                    native_job.terminate()
+                except Exception as error:
+                    state.update(status="interrupted", error="Stop unconfirmed: " + str(error))
+                finally:
+                    native_job.close()
+            if child and child.poll() is None:
+                try:
+                    child.kill()
+                    child.wait(timeout=30)
+                except Exception as error:
+                    state.update(status="interrupted", error="Stop unconfirmed: " + str(error))
+            state["finished_at"] = time.time()
+            write(job / "state.json", state)
+
+
+def submit(job):
+    """Claim a launch once; record a known failure without leaving an ownerless queue."""
+    state = read(job / "state.json")
+    if state["status"] in TERMINAL:
+        return state
+    marker = job / "submitted"
+    try:
+        marker.open("x").close()
+    except FileExistsError:
+        return read(job / "state.json")
+    supervisor = None
+    try:
+        # Another submitter may have failed and released its marker after our
+        # first read. Recheck terminal state only after claiming this launch.
+        state = read(job / "state.json")
+        if state["status"] in TERMINAL:
+            marker.unlink()
+            return state
+        with (job / "supervisor.log").open("ab") as log:
+            supervisor = subprocess.Popen(
+                [
+                    sys.executable,
+                    "-I",
+                    "-B",
+                    "-X",
+                    "utf8",
+                    str(Path(__file__).resolve()),
+                    "supervise",
+                    "--job",
+                    str(job),
+                ],
+                stdin=subprocess.DEVNULL,
+                stdout=log,
+                stderr=log,
+                close_fds=True,
+                creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
+            )
     except Exception as error:
-        state.update(status="failed", error=str(error))
-        traceback.print_exc()
-    finally:
-        if native_job:
-            try:
-                native_job.terminate()
-            except Exception as error:
-                state.update(status="interrupted", error="Stop unconfirmed: " + str(error))
-            finally:
-                native_job.close()
-        if child and child.poll() is None:
-            child.kill()
-            child.wait(timeout=30)
-        state["finished_at"] = time.time()
+        if supervisor is not None:
+            # A failure after Popen returned does not mean the supervisor stopped.
+            # Preserve ownership; the coordinator's lost-reply path requests cancel.
+            raise
+        state.update(
+            status="failed",
+            error="Failed to start Windows supervisor: " + str(error),
+            finished_at=time.time(),
+        )
         write(job / "state.json", state)
+        marker.unlink()
+        return state
+    return read(job / "state.json")
 
 
 def main():
@@ -507,31 +571,7 @@ def main():
         result = inspect_project(args.installation, args.project, args.result, args.allow_open)
         print(json.dumps(result, allow_nan=False))
     elif args.action == "submit":
-        try:
-            (args.job / "submitted").open("x").close()
-        except FileExistsError:
-            print(json.dumps(read(args.job / "state.json")))
-            return
-        with (args.job / "supervisor.log").open("ab") as log:
-            subprocess.Popen(
-                [
-                    sys.executable,
-                    "-I",
-                    "-B",
-                    "-X",
-                    "utf8",
-                    str(Path(__file__).resolve()),
-                    "supervise",
-                    "--job",
-                    str(args.job),
-                ],
-                stdin=subprocess.DEVNULL,
-                stdout=log,
-                stderr=log,
-                close_fds=True,
-                creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
-            )
-        print(json.dumps(read(args.job / "state.json")))
+        print(json.dumps(submit(args.job)))
     elif args.action == "supervise":
         supervise(args.job)
     else:

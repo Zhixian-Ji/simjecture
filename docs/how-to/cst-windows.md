@@ -41,7 +41,8 @@ by that installed reader version; see the local CST Python documentation.
 
 ## Submit and monitor a magnetostatic job
 
-Save the source project. Choose a separate job root on a local Windows drive
+Save and close the source project, and keep its files unchanged during submission.
+Choose a separate job root on a local Windows drive
 mounted in WSL. The operator-side job directory contains the immutable input
 snapshot, writable project copy, request, state, results and Windows logs.
 
@@ -67,14 +68,25 @@ supervisor owns a Windows Job Object containing the worker and its descendant
 processes. Timeout, cancellation or supervisor termination closes that job and
 terminates its members. The runner creates its own CST instance; it does not
 connect to the operator's existing frontend or kill every CST process by name.
+The per-installation lock remains held through process cleanup and terminal-state
+recording. The worker disables CST distributed computing after rebuilding and
+immediately before starting the solver. Saved distributed settings are overridden
+in the working copy because DC services and remote solvers are outside the local
+Job Object. Receipts record `solver_execution="local"`.
 
 `cancel` records a request; inspect `status` until a terminal outcome is reported.
 The supervisor runs on Windows and continues enforcing the deadline if the WSL
 caller exits. Windows shutdown and loss of access to the job drive require
 operator reconciliation; a stale `running` receipt must not be reported as a
 confirmed successful execution or cancellation.
+If supervisor creation definitely fails before a process starts, the receipt is
+marked `failed` and the launch marker is removed. Submit again to create a new job;
+terminal jobs are not relaunched. Failures after process creation preserve the
+launch marker and follow the cancellation/reconciliation path.
 
-The source `.cst` and its companion `Model` directory are snapshotted and hashed.
+The source `.cst` and its complete companion `Model` file inventory are hashed
+before and after copying. Both inventories and the copied hashes must agree;
+changed, added or removed files cause submission to fail before a Windows launch.
 Existing `Result`, `Temp`, `SP` and mesh-cache directories are not staged. The
 Windows worker deletes results in its writable project copy, sets finite numeric
 parameters, rebuilds and starts the magnetostatic solver. It saves the output and
@@ -110,6 +122,25 @@ models, useful internal checks are matrix reciprocity, positive magnetic energy,
 flux linkage and consistency of field energy with `0.5 Iᵀ L I`. These checks do
 not independently prove numerical accuracy. In particular, a mesh stopping limit
 on energy change does not bound the error in every self- or mutual-inductance entry.
+Rebuilding replays CST model history. Settings applied only through transient VBA
+may be reset; persist intended mesh and solver settings in history and verify the
+effective settings in the working copy and solver logs.
+
+## Regression checks
+
+The ordinary Linux suite (`pytest tests/test_cst.py`) exercises snapshot changes,
+local-solver enforcement, cleanup ordering and submission failure recovery without
+CST. Native Job Object and file-lock checks also run in CI on Windows Python 3.9
+and 3.12, without CST, a license or extra Python packages:
+
+```powershell
+python scripts/check_cst_windows.py
+```
+
+From WSL, use Windows Python and Windows paths for the script. The optional
+`--runner PATH` selects an extracted wheel's standalone `cst_windows.py` for
+package validation. These process-boundary checks complement an actual model
+solve; they do not establish solver availability or numerical accuracy.
 
 ## Execution and scientific scope
 
