@@ -10,6 +10,9 @@ This project follows semantic versioning. Dates use ISO 8601.
   process cleanup, deadlines and terminal launch-failure receipts. Add Linux
   regression coverage and native Windows boundary checks without CST. This does
   not expose CST through the Linux numerical sandbox or enable evidence-stage execution.
+  Ship a discoverable `cst-geometry` skill covering imported-solid edits, recorded
+  history, full-profile comparisons and assembly checks through authorized native
+  automation; geometry editing is not a bridge CLI command.
 
 - Preserve autonomous-study tool selections across agent redrafting and restarts.
   Teach native agents to attach registered tools in study briefs, retain declared

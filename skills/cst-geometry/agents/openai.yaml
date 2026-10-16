@@ -1,0 +1,4 @@
+interface:
+  display_name: "CST Geometry Editing"
+  short_description: "Edit CST geometry and inspect complete cross-sections"
+  default_prompt: "Use $cst-geometry to inspect this CST project, edit the requested geometry on a copy, and show the complete before-and-after profile."

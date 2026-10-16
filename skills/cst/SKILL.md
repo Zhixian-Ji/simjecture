@@ -16,6 +16,11 @@ Read the installed CST Python and VBA documentation for its exact release.
 availability only. The built-in Python is used when present; `--python` selects
 another Windows interpreter compatible with that CST release.
 
+For creating or editing solids, imported CAD, rounded tips, or complete profile
+comparisons, read the separate `cst-geometry` skill (`read_skill(name="cst-geometry")`
+for API agents). It documents authorized native automation; geometry editing is
+not a command implemented by this bridge.
+
 ## Existing projects
 
 Ask for a saved, self-contained project and the required observables. Inspect it

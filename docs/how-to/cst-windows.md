@@ -107,6 +107,21 @@ request UAC elevation or attach to an existing elevated frontend. Saved-result
 inspection may still work in an ordinary WSL session when frontend startup is
 blocked. Report those checks separately from a successful fresh solve.
 
+## Geometry editing guidance for agents
+
+The discoverable `cst-geometry` skill documents how an authorized host agent can
+inspect and edit geometry through the installed CST Python/VBA interfaces. It
+covers imported solids, recorded modeling history, non-ASCII shape names, full
+section comparisons, smooth joins, and assembly interfaces. Native agents read
+`skills/cst-geometry/SKILL.md`; API agents use `read_skill(name="cst-geometry")`
+and load its linked references as needed. The skill ships with the Python package.
+
+This is reusable workflow guidance, not a geometry-editing CLI command. It does
+not extend `cst submit` beyond LF MStatic. A geometry edit should be saved to a
+separate project and checked by rebuilding, reopening, and reviewing the complete
+profile. An increased tip radius alone can hide new connector faces and sharp
+joins. A successful geometry edit does not establish simulation accuracy.
+
 ## Commission the actual model
 
 The official **Two Coils** example is a useful initial instrument: in CST's
