@@ -1,0 +1,8 @@
+{
+  "schema_version": "0.1.0",
+  "name": "cst-geometry",
+  "version": "0.1.0",
+  "entrypoint": "SKILL.md",
+  "description": "Inspect and edit CST CAD geometry on copies with recorded history and complete profile verification using authorized Windows host tools",
+  "capability_names": []
+}

@@ -1,0 +1,8 @@
+{
+  "schema_version": "0.1.0",
+  "name": "cst",
+  "version": "0.1.0",
+  "entrypoint": "SKILL.md",
+  "description": "Operate the experimental WSL bridge to an existing Windows CST installation for magnetostatic commissioning and saved 0D/1D result inspection",
+  "capability_names": []
+}
