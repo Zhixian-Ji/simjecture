@@ -142,6 +142,10 @@ include WarpX, operator-supplied FLASH, EOS/opacity tools, ITER diagnostics and
 [GPU cylinder flow](https://drawingsword.com/simjecture/how-to/cylinder-flow.html). The cylinder solver and its
 validation records were contributed by [Zifei Meng](https://github.com/ZifeiMengSPH).
 
+An experimental [Windows CST bridge](docs/how-to/cst-windows.md) lets WSL users
+inspect saved results and commission existing magnetostatic projects with their
+installed CST. It uses trusted Windows processes and records exploratory jobs.
+
 - [Commission a scientific instrument](https://drawingsword.com/simjecture/how-to/guided-commissioning.html) or
   [add your own capability](https://drawingsword.com/simjecture/how-to/add-a-capability.html).
 - [Run experiments on local or SSH workers](https://drawingsword.com/simjecture/how-to/ssh-workers.html).

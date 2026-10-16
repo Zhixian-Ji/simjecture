@@ -4,6 +4,12 @@ This project follows semantic versioning. Dates use ISO 8601.
 
 ## Unreleased
 
+- Add an experimental operator-side WSL bridge to an existing Windows CST
+  installation: inspect saved 0D/1D results and submit parameterized magnetostatic
+  jobs with independent working copies, Windows process cleanup, deadlines and
+  recorded exploratory results. This does not expose CST through the Linux
+  numerical sandbox or enable evidence-stage execution.
+
 - Extend active minimal studies from the workspace, experiment monitor, CLI or local
   operator API. Deadline changes are live, idempotent and recorded with their
   original budget; the director replans without restarting numerical jobs. Agents

@@ -686,6 +686,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="simjecture")
     subcommands = parser.add_subparsers(dest="command", required=True)
 
+    from .cst import configure_parser as configure_cst
+
+    configure_cst(subcommands.add_parser(
+        "cst", help="Experimental operator-side WSL bridge to installed Windows CST"
+    ))
+
     from .study import configure_parser
 
     configure_parser(
