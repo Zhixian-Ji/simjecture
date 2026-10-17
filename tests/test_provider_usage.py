@@ -147,6 +147,10 @@ def test_context_metadata_never_contains_message_or_reasoning_text():
     )
     assert metadata["messages"][0]["reasoning_bytes"] == len("private-reasoning")
     assert metadata["messages"][0]["sha256"]
+    assert metadata["output_budget"] == dict(source="provider_default", limits={})
+    assert context_metadata(request | {"max_tokens": 65536})["output_budget"] == dict(
+        source="request", limits={"max_tokens": 65536}
+    )
 
 
 def test_status_reports_uncached_input_by_role_without_inventing_missing_cache(tmp_path):

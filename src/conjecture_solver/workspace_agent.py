@@ -42,8 +42,13 @@ def read_provider(path, *, api_only=False):
 
 
 def model_for(
-    config, model=None, timeout=90, max_tokens=8192, *, native_tools=False, completion_check=None
+    config, model=None, timeout=90, max_tokens=None, *, native_tools=False, completion_check=None
 ):
+    output_limit = max_tokens if max_tokens is not None else config.get("max_tokens")
+    if output_limit is not None and (
+        isinstance(output_limit, bool) or not isinstance(output_limit, int) or output_limit <= 0
+    ):
+        raise ValueError("max_tokens must be a positive integer or omitted for provider defaults")
     require_runtime()
     from smolagents import OpenAIServerModel
 
@@ -272,12 +277,13 @@ def model_for(
     extra = (
         {"reasoning_effort": config["reasoning_effort"]} if config.get("reasoning_effort") else {}
     )
+    if output_limit is not None:
+        extra["max_tokens"] = output_limit
     return ActivityModel(
         model_id=model or config["model"],
         api_base=config["base_url"],
         api_key=config.get("api_key") or "local",
         client_kwargs={"timeout": timeout, "max_retries": 1},
-        max_tokens=max_tokens,
         **extra,
     )
 
@@ -664,7 +670,6 @@ def run_agent(
         config,
         model,
         timeout=min(600, max(1, wall_seconds or 600)),
-        max_tokens=32768 if judge else 8192,
         native_tools=native_tools,
     )
     if judge:
@@ -678,7 +683,7 @@ def run_agent(
         for attempt in range(2):
             if time.time() >= deadline:
                 raise ValueError("Independent review deadline exhausted")
-            options = {"max_tokens": 32768}
+            options = {}
             deepseek = (
                 "deepseek" in (model or config["model"]).lower()
                 or urlparse(config["base_url"]).hostname == "api.deepseek.com"

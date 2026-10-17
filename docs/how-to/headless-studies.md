@@ -69,6 +69,12 @@ can use its own `--judge-provider-config`; it inherits the worker's provider
 configuration when both use the built-in backend and no separate file is given.
 API reviewer files must describe an API connection; select a native CLI with
 `--judge-backend` rather than putting a CLI profile in that file.
+The built-in agent calls the configured API directly through smolagents; it does
+not run through DeepSeek Harness. It leaves the output-token budget to the provider
+by default. An operator can set a positive integer `max_tokens` in the private
+provider JSON to request an explicit ceiling; omit it or use `null` to retain
+the provider default. Request metadata records this choice. Campaign deadlines
+and hosted service allowances remain separate controls.
 Native reviewers likewise inherit the worker's CLI wrapper when sharing its
 backend. A different backend uses its own CLI and login. Role settings are saved
 with the launch request and reused on resume, including browser resumes. The
