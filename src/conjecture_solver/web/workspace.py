@@ -1978,6 +1978,19 @@ class Workspace(MachineWorkspace, ProjectCollections):
                     return study
             if project.get("brief_launched"):
                 raise ValueError("This proposal has already launched. Prepare another study first.")
+            judge_backend = (
+                text(payload, "judge_backend", 30) or None
+                if payload.get("judge_backend") is not None else None
+            )
+            if judge_backend not in {None, "builtin", "codex", "codex-glm", "grok", "agy"}:
+                raise ValueError("Choose a supported reviewer agent")
+            judge_model = text(payload, "judge_model", 200)
+            if judge_backend and judge_backend != config["backend"] and not judge_model:
+                raise ValueError("Choose the model for the separate reviewer agent")
+            judge_model = judge_model or config.get("judge_model") or config["model"]
+            review_backend = judge_backend or config["backend"]
+            if not self.model_matches_backend(review_backend, judge_model):
+                raise ValueError("Choose a model belonging to the reviewer agent")
             capability_directory = (
                 text(payload, "capability_directory", 4096)
                 if "capability_directory" in payload
@@ -2043,6 +2056,20 @@ class Workspace(MachineWorkspace, ProjectCollections):
             root.parent.mkdir(exist_ok=True)
             frozen = self.root / "connections" / f"{identifier}-{number:03d}.json"
             private_json(frozen, config)
+            review_provider = None
+            if review_backend == "builtin":
+                review_config = config if config["backend"] == "builtin" else self.api_config()
+                if not review_config.get("base_url"):
+                    raise ValueError("Add an API endpoint in Connections for the reviewer")
+                review_config = review_config | dict(
+                    backend="builtin", model=judge_model,
+                    reasoning_effort=payload.get("judge_reasoning_effort")
+                    or review_config.get("reasoning_effort") or "",
+                )
+                review_provider = (
+                    self.root / "connections" / f"{identifier}-{number:03d}-reviewer.json"
+                )
+                private_json(review_provider, review_config)
             instruction = (
                 f"Project objective: {project['name']}\n"
                 f"Evidence and acceptance: {brief['success_criteria']}\n"
@@ -2072,9 +2099,9 @@ class Workspace(MachineWorkspace, ProjectCollections):
                     mode="minimal",
                     backend=config["backend"],
                     model=config["model"],
-                    judge_model=text(payload, "judge_model", 200)
-                    or config.get("judge_model")
-                    or config["model"],
+                    judge_model=judge_model,
+                    judge_backend=judge_backend,
+                    judge_provider_config=str(review_provider) if review_provider else None,
                     reasoning_effort=config.get("reasoning_effort") or None,
                     judge_reasoning_effort=payload.get("judge_reasoning_effort") or None,
                     director_enabled=payload.get("director_enabled", True),

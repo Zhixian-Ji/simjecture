@@ -4,6 +4,12 @@ This project follows semantic versioning. Dates use ISO 8601.
 
 ## Unreleased
 
+- Configure a separate agent backend for the research director and independent
+  reviewers, including an API worker with a native CLI reviewer or the reverse.
+  Save role-specific connections on launch and resume, expose the choice in the
+  study's advanced settings, and retain the hosted service's managed agents.
+  Preserve the exact hypothesis text when preparing direct CLI resumes.
+
 - Keep the configured review backoff after the director parks a research worker.
   The director's own wait record no longer triggers another model review as if
   it were new evidence. New plans, results, steering and operational alerts

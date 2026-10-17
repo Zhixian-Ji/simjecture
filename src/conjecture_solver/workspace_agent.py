@@ -28,10 +28,12 @@ def require_runtime():
         raise ValueError("Install the built-in agent with: uv sync --extra workspace")
 
 
-def read_provider(path):
+def read_provider(path, *, api_only=False):
     if not path or not Path(path).is_file():
         raise ValueError("Choose an agent and model in the conversation before starting")
     config = json.loads(Path(path).read_text())
+    if api_only and config.get("backend", "builtin") != "builtin":
+        raise ValueError("An API reviewer requires an API profile; select its CLI backend instead")
     if not config.get("model") or not config.get("base_url"):
         raise ValueError(
             "Choose a model in the conversation and configure its API endpoint if needed"
@@ -966,7 +968,7 @@ def main(argv=None):
     parser.add_argument("--workspace", type=Path)
     parser.add_argument("--project")
     args = parser.parse_args(argv)
-    config = read_provider(args.provider_config)
+    config = read_provider(args.provider_config, api_only=args.judge)
     workspace = None
     if args.workspace:
         from .web.workspace import Workspace

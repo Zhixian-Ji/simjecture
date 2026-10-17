@@ -18,6 +18,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+from .agent_routes import review_route
 from .campaign_kernel import CampaignKernel
 from .mvp_launch import MVPOutputLock
 from .provider_retry import ProviderFailure, provider_failure, provider_recovered, wait_for_provider
@@ -185,6 +186,9 @@ class AgentSupervisor:
         with (self.directory / "events.jsonl").open("a") as stream:
             stream.write(json.dumps(dict(time=time.time(), kind=kind, **fields)) + "\n")
 
+    def review_backend(self):
+        return getattr(self.args, "judge_backend", None) or getattr(self.args, "backend", "agy")
+
     def inspect(self):
         with MVPOutputLock(self.root):
             kernel = CampaignKernel.open_existing(root=self.root)
@@ -248,7 +252,18 @@ class AgentSupervisor:
         if duration <= 0:
             return 124
         (directory / "task.txt").write_text(prompt)
-        backend = getattr(self.args, "backend", "agy")
+        worker_backend = getattr(self.args, "backend", "agy")
+        backend = self.review_backend() if judge else worker_backend
+        executable = getattr(self.args, "executable", worker_backend)
+        provider_config = getattr(self.args, "provider_config", None)
+        if judge:
+            route = review_route(
+                worker_backend, executable, provider_config,
+                judge_backend=getattr(self.args, "judge_backend", None),
+                judge_executable=getattr(self.args, "judge_executable", None),
+                judge_provider_config=getattr(self.args, "judge_provider_config", None),
+            )
+            executable, provider_config = route["executable"], route["provider_config"]
         work_directory = directory
         if not judge and self.workflow == "frontier":
             work_directory = self.directory / "research"
@@ -259,7 +274,7 @@ class AgentSupervisor:
                 "-m",
                 "conjecture_solver.workspace_agent",
                 "--provider-config",
-                str(self.args.provider_config),
+                str(provider_config),
                 "--prompt-file",
                 str(directory / "task.txt"),
                 "--cwd",
@@ -273,7 +288,7 @@ class AgentSupervisor:
                 command += ["--judge"]
         elif backend in {"codex", "codex-glm"}:
             cursor = self.state.get("worker_cursor") if self.workflow == "frontier" else None
-            command = [self.args.executable, "exec"]
+            command = [executable, "exec"]
             if cursor and not judge:
                 command += ["resume", cursor]
             command += [
@@ -294,7 +309,7 @@ class AgentSupervisor:
                 command[-1:-1] = ["-c", f'model_reasoning_effort="{effort}"']
         elif backend == "grok":
             command = [
-                self.args.executable,
+                executable,
                 "--prompt-file",
                 str(directory / "task.txt"),
                 "--cwd",
@@ -336,7 +351,7 @@ class AgentSupervisor:
                     command += ["--include-partial-messages"]
         else:
             command = [
-                self.args.executable,
+                executable,
                 "--print",
                 prompt,
                 "--model",
@@ -811,7 +826,7 @@ Host feedback: {self.state.get("next_test") or "No previous review."}
 
     def judge_case(self, directory, packet, schema, purpose):
         """Retry malformed judge output in a fresh context; never repair semantics locally."""
-        backend = getattr(self.args, "backend", "agy")
+        backend = self.review_backend()
         error = None
         for attempt in range(2):
             self.state["review_launch_count"] = self.state.get("review_launch_count", 0) + 1
@@ -907,7 +922,7 @@ Host feedback: {self.state.get("next_test") or "No previous review."}
                     result = ScientificReviews(kernel.host).record(
                         packet,
                         verdict,
-                        reviewer=f"{getattr(self.args, 'backend', 'agy')}:{self.args.judge_model}",
+                        reviewer=f"{self.review_backend()}:{self.args.judge_model}",
                         transcript_sha256=hashlib.sha256(transcript.read_bytes()).hexdigest(),
                     )
             self.state["next_test"] = json.dumps(result)
@@ -941,7 +956,7 @@ Host feedback: {self.state.get("next_test") or "No previous review."}
                 case_sha256=frozen["case_sha256"],
                 verdict=verdict.model_dump(mode="json"),
                 model=self.args.judge_model,
-                route=f"{getattr(self.args, 'backend', 'agy')}-isolated-tool-free",
+                route=f"{self.review_backend()}-isolated-tool-free",
                 judge_run_id=f"judge-{self.state['round']}",
                 usage={},
             ),

@@ -623,6 +623,7 @@ class HostedWorkspace:
                 "director_enabled",
                 "allow_solver_development",
                 "judge_model",
+                "judge_backend",
                 "judge_reasoning_effort",
             },
             "new-study": {"project"},
@@ -666,7 +667,7 @@ class HostedWorkspace:
                 "hosted-tools",
             ) or values.get("execution_backend") not in (None, "", "trusted-template"):
                 raise PermissionError("Execution is provided by the host")
-            if values.get("judge_model") not in (
+            if values.get("judge_backend") not in (None, "") or values.get("judge_model") not in (
                 None,
                 "",
                 self.provider().get("reviewer_model"),

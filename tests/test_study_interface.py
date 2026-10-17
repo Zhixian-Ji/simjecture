@@ -33,6 +33,25 @@ def test_native_launch_persists_mode_backend_and_fixed_deadline(tmp_path):
     assert minimal_snapshot(root).identity.config["mode"] == "minimal"
 
 
+def test_separate_reviewer_route_survives_native_resume(tmp_path):
+    request = NativeStudyRequest(
+        hypothesis="A finite claim.", campaign_id="study",
+        output_directory=str(tmp_path / "study"), max_wall_seconds=60,
+        model="worker-model", agent_executable=sys.executable,
+        judge_backend="codex", judge_executable=sys.executable,
+        judge_model="review-model", judge_reasoning_effort="high",
+    )
+    plan = materialize_operator_input(request)
+    root = Path(plan.output_directory)
+    before = ResearchService(root).manifest["deadline"]
+    resumed = prepare_resume(root)
+    for argv in (plan.argv, resumed.argv):
+        assert argv[argv.index("--judge-backend") + 1] == "codex"
+        assert argv[argv.index("--judge-executable") + 1] == sys.executable
+        assert argv[argv.index("--judge-model") + 1] == "review-model"
+    assert ResearchService(root).manifest["deadline"] == before
+
+
 def test_browser_defaults_and_explicit_unsupported_routes(tmp_path):
     app = SimjectureWebApplication(scan_roots=(tmp_path,), runs_root=tmp_path / "runs")
     assert app.bootstrap()["default_mode"] == "minimal"

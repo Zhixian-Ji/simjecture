@@ -199,7 +199,7 @@ class AutomaticJournal:
                 raise ValueError(f"Journal summary incomplete (exit {rc})")
             summary = JournalSynthesis.model_validate(
                 parse_judge_stream(
-                    directory / "response.json", self.args.backend, allow_readonly_tools=True
+                    directory / "response.json", self.review_backend(), allow_readonly_tools=True
                 )
             )
             identifiers = {e["id"] for e in packet["attempts"]}
