@@ -388,6 +388,10 @@ reviews of healthy, unchanged work to at most 15 minutes, with operational check
 at up to one-minute intervals during deferral. A changed record/plan or steering,
 pending replan, transport failure, stale telemetry, runtime risk or near deadline
 restores the shorter cadence. Existing stored study policies retain their cadence.
+An idle worker awaiting operator feedback can also use this deferral. A director
+decision to park that worker becomes the current reviewed state; the wait record
+it creates does not itself count as new evidence. New worker plans or results
+still trigger strategy review.
 The monitor shows this policy and a deferred review's latest scheduled time.
 Native worker turns still checkpoint within five minutes.
 Each director call has a two-minute allowance, separate from the worker's turn
