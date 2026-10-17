@@ -365,6 +365,9 @@ def test_builtin_worker_uses_native_codex_reviewer_without_crossing_routes(tmp_p
             assert argv[argv.index("--model") + 1] == "deepseek-flash"
             assert argv[argv.index("--provider-config") + 1] == "private-provider.json"
             assert "--judge" not in argv
+            assert argv[argv.index("--session-dir") + 1] == str(
+                supervisor.directory / "worker-session"
+            )
     assert supervisor.state["usage_by_thread"]["worker"]["input_tokens"] == 11
     assert supervisor.state["usage_by_thread"]["review-thread"]["input_tokens"] == 7
     assert supervisor.state["usage_roles_by_thread"] == {

@@ -33,6 +33,37 @@ def supervisor(tmp_path, *, wall_seconds=900):
     return sup
 
 
+def test_director_sees_read_activity_separately_from_recorded_work(tmp_path):
+    from conjecture_solver.research_oversight import durable_signature
+
+    sup = supervisor(tmp_path)
+    for i in range(2):
+        turn = sup.directory / f"inspect-{i}"
+        turn.mkdir()
+        (turn / "response.json").write_text(
+            json.dumps(
+                dict(
+                    type="tool",
+                    name="terminal",
+                    arguments={"command": f"sed -n '{i + 1},20p' calc.py"},
+                )
+            )
+            + "\n"
+            + json.dumps(dict(type="reasoning", text="PRIVATE"))
+            + "\n"
+        )
+        sup.observe_turn(turn, durable_signature(sup.service))
+        activity = sup.director_packet()["worker_activity"]
+        assert activity["turns_without_recorded_change"] == i + 1
+        assert activity["provisional_no_progress_streak"] == 0
+        assert "sed -n" in str(activity["recent_actions"])
+        assert "PRIVATE" not in json.dumps(activity)
+    before = durable_signature(sup.service)
+    (sup.service.work / "calc.py").write_text("print(2)\n")
+    sup.observe_turn(turn, before)
+    assert sup.director_packet()["worker_activity"]["turns_without_recorded_change"] == 0
+
+
 def active(sup, monkeypatch, *, timeout=700):
     monkeypatch.setattr(sup.service, "_spawn_experiment", lambda record: None)
     r = sup.service.run("calc.py", outputs=["result.json"], stage="exploration", timeout=timeout)

@@ -2,7 +2,8 @@
 
 No text is parsed into executable tool calls. Completion probes are supplied by
 trusted host code, never by a model response or provider configuration.
-The checkpoint hook is experimental; production retains its existing summary policy.
+Research workers use saved-work checkpoints instead of a tool-free generated summary;
+interactive conversations retain their existing completion policy.
 """
 
 import copy

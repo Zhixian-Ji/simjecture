@@ -236,3 +236,62 @@ def test_normal_24_step_checkpoint_is_incomplete(api, tmp_path):
     result = agent.run("Read and produce a result file")
     assert result.state == "max_steps_error" and len(requests) == 24
     assert not (tmp_path / "result.json").exists()
+
+
+def test_research_worker_continues_after_action_limit_with_executed_receipts(tmp_path, api):
+    from conjecture_solver.workspace_sessions import load_session
+
+    url, requests, responses = api
+    config = dict(model="profile-default", base_url=url, api_key="test-secret")
+    route = {**config, "model": "deepseek-flash"}
+    session_dir = tmp_path / "supervisor/worker-session"
+    (tmp_path / "input.txt").write_text("observed input")
+    responses.extend(response((f"read-{i}", "read_file", {"path": "input.txt"})) for i in range(24))
+    answer = wa.run_agent(
+        "Inspect the input and write the result.",
+        tmp_path,
+        config,
+        model="deepseek-flash",
+        wall_seconds=60,
+        session_dir=session_dir,
+    )
+    assert "incomplete" in answer
+    assert len(requests) == 24  # No extra tool-free summary request.
+    saved = load_session(session_dir, route)
+    assert any(m.get("tool_call_id") == "read-23" for m in saved["history"])
+    assert not load_session(session_dir, config)  # The effective model owns the session.
+    assert "private-reasoning" not in json.dumps(saved["history"])
+    assert not (tmp_path / "result.txt").exists()
+
+    responses.extend(
+        [
+            response(("write", "write_file", {"path": "result.txt", "content": "delivered"})),
+            response(("finish", "final_answer", {"answer": "Result saved."})),
+        ]
+    )
+    assert (
+        wa.run_agent(
+            "Continue; the current evidence brief is available.",
+            tmp_path,
+            config,
+            model="deepseek-flash",
+            wall_seconds=60,
+            session_dir=session_dir,
+        )
+        == "Result saved."
+    )
+    wire = requests[24]["messages"]
+    assert any(m.get("tool_call_id") == "read-23" for m in wire)
+    assert all(
+        m.get("reasoning_content") == "private-reasoning" for m in wire if m.get("tool_calls")
+    )
+    assert (tmp_path / "result.txt").read_text() == "delivered"
+
+    # Long studies keep recent exact receipts plus the fresh durable brief,
+    # rather than duplicating every full campaign prompt into the next context.
+    saved = load_session(session_dir, route)
+    assert any(m.get("tool_call_id") == "write" for m in saved["history"])
+    assert not any(m.get("tool_call_id") == "read-23" for m in saved["history"])
+    assert (session_dir / "agent-session.json").stat().st_mode & 0o777 == 0o600
+    with pytest.raises(ValueError, match="Independent reviewers"):
+        wa.run_agent("Review independently.", tmp_path, config, judge=True, session_dir=session_dir)
