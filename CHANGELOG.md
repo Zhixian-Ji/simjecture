@@ -4,6 +4,10 @@ This project follows semantic versioning. Dates use ISO 8601.
 
 ## Unreleased
 
+- Preserve recent API-worker tool history across autonomous research checkpoints.
+  Reaching the action limit now saves an incomplete checkpoint without spending
+  another request on a tool-free summary. Reviewers retain independent contexts.
+
 - Configure a separate agent backend for the research director and independent
   reviewers, including an API worker with a native CLI reviewer or the reverse.
   Save role-specific connections on launch and resume, expose the choice in the

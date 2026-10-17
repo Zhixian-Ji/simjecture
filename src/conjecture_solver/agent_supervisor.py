@@ -286,6 +286,8 @@ class AgentSupervisor:
             ]
             if judge:
                 command += ["--judge"]
+            elif self.workflow == "frontier":
+                command += ["--session-dir", str(self.directory / "worker-session")]
         elif backend in {"codex", "codex-glm"}:
             cursor = self.state.get("worker_cursor") if self.workflow == "frontier" else None
             command = [executable, "exec"]

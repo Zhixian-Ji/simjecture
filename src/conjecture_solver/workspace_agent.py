@@ -651,7 +651,10 @@ def run_agent(
     judge=False,
     project=None,
     workspace=None,
+    session_dir=None,
 ):
+    if judge and session_dir is not None:
+        raise ValueError("Independent reviewers cannot resume a worker session")
     deadline = time.time() + wall_seconds if wall_seconds is not None else float("inf")
     native_tools = not judge and (
         "deepseek" in (model or config["model"]).lower()
@@ -715,7 +718,7 @@ def run_agent(
         )
     from .workspace_protocol import agent_type, step_messages
 
-    ToolCallingAgent = agent_type(native_tools=native_tools)
+    ToolCallingAgent = agent_type(native_tools=native_tools, checkpoint=session_dir is not None)
 
     def step_event(step, **kwargs):
         if time.time() >= deadline:
@@ -770,20 +773,31 @@ def run_agent(
     )
     from .workspace_sessions import load_session, save_session
 
-    session = load_session(root.parent, config) if workspace and project else {}
+    session_root = (
+        Path(session_dir)
+        if session_dir is not None
+        else (root.parent if workspace and project else None)
+    )
+    session_config = {**config, "model": model or config["model"]}
+    session = load_session(session_root, session_config) if session_root is not None else {}
     history = session.get("history", [])
     llm.conversation_history = history
     llm.reasoning_records = session.get("reasoning_records", [])
     llm.reasoning_messages = session.get("reasoning_messages", {})
-    if workspace and project:
+    previous_reasoning = len(llm.reasoning_records)
+    if session_root is not None:
         emit("session", resumed=bool(history), backend="builtin")
     with contextlib.redirect_stdout(sys.stderr):
         # Tool/step events use the original stream while library chatter stays out of JSONL.
         try:
             result = agent.run(prompt)
         finally:
-            if workspace and project:
-                messages = list(history)
+            if session_root is not None:
+                # Research turns already receive a fresh durable evidence brief.
+                # Retain the preceding turn's exact calls/results for continuity,
+                # without repeatedly appending full briefs for a day-long study.
+                # Earlier evidence remains in files, receipts and the research journal.
+                messages = [] if session_dir is not None else list(history)
                 from smolagents.memory import FinalAnswerStep
 
                 for step in agent.memory.steps:
@@ -792,11 +806,15 @@ def run_agent(
                         continue
                     messages.extend(step_messages(step))
                 save_session(
-                    root.parent,
-                    config,
+                    session_root,
+                    session_config,
                     history=messages,
-                    reasoning_records=llm.reasoning_records,
-                    reasoning_messages=llm.reasoning_messages,
+                    reasoning_records=(
+                        llm.reasoning_records[previous_reasoning:]
+                        if session_dir is not None
+                        else llm.reasoning_records
+                    ),
+                    reasoning_messages={} if session_dir is not None else llm.reasoning_messages,
                 )
         if result.state != "success":
             return (
@@ -967,6 +985,7 @@ def main(argv=None):
     parser.add_argument("--judge", action="store_true")
     parser.add_argument("--workspace", type=Path)
     parser.add_argument("--project")
+    parser.add_argument("--session-dir", type=Path)
     args = parser.parse_args(argv)
     config = read_provider(args.provider_config, api_only=args.judge)
     workspace = None
@@ -1016,6 +1035,7 @@ def main(argv=None):
                 judge=args.judge,
                 project=args.project,
                 workspace=workspace,
+                session_dir=args.session_dir,
             )
         emit("result", subtype="success", result=answer)
         return 0

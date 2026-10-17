@@ -69,6 +69,11 @@ another workflow. `--backend` selects `codex-glm`, `codex`, `grok`, `agy` or
 available. `builtin` uses a private `--provider-config` file and requires the
 workspace extra; it supports minimal mode only. Keep provider credentials out of
 committed files and shared records.
+API research workers retain the preceding turn's structured tool calls and results
+alongside the current evidence brief. Their action limit creates an incomplete
+checkpoint, not a research conclusion or an extra model-generated summary.
+Older evidence remains in project files, receipts and the research journal;
+independent reviewers receive separate contexts.
 `--wall-seconds` fixes the study budget and `--turn-seconds` controls the native
 session allowance/watchdog. Resume with the same campaign and instructions;
 mode and deadline are preserved. `--continue-from` instead creates a new minimal
