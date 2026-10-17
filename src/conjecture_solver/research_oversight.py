@@ -147,6 +147,9 @@ class ResearchOversight:
         self.state["no_progress_streak"] = (
             0 if progressed else self.state.get("no_progress_streak", 0) + 1
         )
+        self.state["turns_without_recorded_change"] = (
+            0 if changed else self.state.get("turns_without_recorded_change", 0) + 1
+        )
         if progressed:
             self.state["last_progress_at"] = time.time()
         if changed:
