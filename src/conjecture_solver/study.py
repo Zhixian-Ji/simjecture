@@ -12,6 +12,7 @@ import shutil
 import signal
 from pathlib import Path
 
+from .agent_routes import review_route
 from .research_service import ResearchService, put
 
 MODES = ("minimal", "structured", "frontier")
@@ -81,6 +82,12 @@ def configure_parser(parser):
     parser.add_argument("--completion-policy", choices=["answer", "repair"])
     parser.add_argument("--model")
     parser.add_argument("--judge-model")
+    parser.add_argument(
+        "--judge-backend", choices=["codex-glm", "codex", "grok", "agy", "builtin"],
+        help="Director and reviewer backend; defaults to the worker backend",
+    )
+    parser.add_argument("--judge-executable")
+    parser.add_argument("--judge-provider-config")
     parser.add_argument(
         "--reasoning-effort", choices=["low", "medium", "high", "xhigh", "max", "ultra"]
     )
@@ -271,13 +278,42 @@ def _run(args):
     args.executable = (
         args.executable or previous.get("request", {}).get("agent_executable") or args.backend
     )
+    args.provider_config = getattr(args, "provider_config", None) or previous.get(
+        "request", {}
+    ).get("provider_config")
+    saved_review = previous.get("reviewer_route", {})
+    saved_request = previous.get("request", {})
+    for field in ("judge_backend", "judge_executable", "judge_provider_config"):
+        saved = saved_request.get(field) or saved_review.get(field)
+        chosen = getattr(args, field, None)
+        setattr(args, field, chosen or saved)
+    review = review_route(
+        args.backend, args.executable, args.provider_config,
+        judge_backend=args.judge_backend, judge_executable=args.judge_executable,
+        judge_provider_config=args.judge_provider_config,
+    )
+    if previous:
+        original_review = review_route(
+            previous["backend"],
+            saved_request.get("agent_executable") or previous["backend"],
+            saved_request.get("provider_config"),
+            **{field: saved_request.get(field) or saved_review.get(field) for field in (
+                "judge_backend", "judge_executable", "judge_provider_config"
+            )},
+        )
+        if review != original_review:
+            raise ValueError("Reviewer backend is part of the saved launch contract")
+    if review["backend"] == "builtin":
+        from .workspace_agent import read_provider, require_runtime
+
+        require_runtime()
+        read_provider(review["provider_config"])
+    elif shutil.which(review["executable"]) is None:
+        raise ValueError(f"Reviewer executable {review['executable']!r} not found")
     if args.backend == "builtin":
         from .workspace_agent import read_provider, require_runtime
 
         require_runtime()
-        args.provider_config = getattr(args, "provider_config", None) or previous.get(
-            "request", {}
-        ).get("provider_config")
         read_provider(args.provider_config)
         if mode != "minimal":
             raise ValueError("Built-in research uses minimal mode")
@@ -436,6 +472,9 @@ def _run(args):
             backend=args.backend,
             model=args.model,
             judge_model=args.judge_model,
+            judge_backend=args.judge_backend,
+            judge_executable=args.judge_executable,
+            judge_provider_config=args.judge_provider_config,
             reasoning_effort=args.reasoning_effort,
             judge_reasoning_effort=args.judge_reasoning_effort,
             director_enabled=args.director_enabled,
@@ -453,10 +492,23 @@ def _run(args):
         ).model_dump(mode="json")
         operator = args.campaign / "operator_input"
         operator.mkdir(exist_ok=True)
-        (operator / "hypothesis.txt").write_text(record["request"]["hypothesis"])
+        # The request schema normalizes whitespace. Preserve the exact frozen
+        # hypothesis for resumes, which compare it with the service manifest.
+        (operator / "hypothesis.txt").write_text(
+            hypothesis or (
+                supervisor.service.manifest["hypothesis"]
+                if mode == "minimal"
+                else CampaignKernel.open_existing(args.campaign).hypothesis
+            )
+        )
         (operator / "instruction.txt").write_text(args.instructions_file.read_text())
     record.update(
         judge_model=args.judge_model,
+        reviewer_route={
+            "judge_backend": args.judge_backend,
+            "judge_executable": args.judge_executable,
+            "judge_provider_config": args.judge_provider_config,
+        },
         protocol_sha256=protocol_hash,
         execution_preflight=execution_probe,
     )

@@ -140,7 +140,7 @@ class ResearchSupervisor(
         self.worker_slice_seconds = 300
         self.state["mode"] = "minimal"  # workflow=frontier selects native transport reuse.
         self.state["reviewer_route"] = {
-            "backend": args.backend,
+            "backend": self.review_backend(),
             "model": args.judge_model,
             "reasoning_effort": getattr(args, "judge_reasoning_effort", None)
             or getattr(args, "reasoning_effort", None),
@@ -601,7 +601,7 @@ Do not edit service records or other studies. Resume from lab.status() and your 
                     verdict = ResearchVerdict.model_validate(
                         parse_judge_stream(
                             directory / "response.json",
-                            self.args.backend,
+                            self.review_backend(),
                             allow_readonly_tools=True,
                         )
                     )

@@ -394,7 +394,14 @@ class SimjectureWebApplication:
                     execution_backend=payload.get("execution_backend", "bubblewrap"),
                     backend=backend,
                     model=payload.get("model") or None,
+                    agent_executable=payload.get("agent_executable") or None,
+                    provider_config=payload.get("provider_config") or None,
+                    reasoning_effort=payload.get("reasoning_effort") or None,
                     judge_model=payload.get("judge_model") or None,
+                    judge_backend=payload.get("judge_backend") or None,
+                    judge_executable=payload.get("judge_executable") or None,
+                    judge_provider_config=payload.get("judge_provider_config") or None,
+                    judge_reasoning_effort=payload.get("judge_reasoning_effort") or None,
                     allow_solver_development=payload.get("allow_solver_development", True)
                     if mode == "minimal"
                     else None,

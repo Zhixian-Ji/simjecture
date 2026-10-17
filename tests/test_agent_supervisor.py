@@ -302,6 +302,7 @@ def test_codex_worker_and_reviewer_use_distinct_efforts(tmp_path):
     args = argparse.Namespace(
         campaign=root, state_dir=tmp_path / "supervisor", wall_seconds=30,
         turn_seconds=10, executable=str(executable), backend="codex",
+        judge_backend="codex",
         model="gpt-6-luna", judge_model="gpt-6.1-sol", workflow="structured",
         reasoning_effort="medium", judge_reasoning_effort="high",
     )
@@ -313,6 +314,109 @@ def test_codex_worker_and_reviewer_use_distinct_efforts(tmp_path):
         argv = json.loads((directory / "response.json").read_text())["argv"]
         assert argv[argv.index("--model") + 1] == model
         assert f'model_reasoning_effort="{effort}"' in argv
+
+
+def test_builtin_worker_uses_native_codex_reviewer_without_crossing_routes(tmp_path, monkeypatch):
+    import sys
+
+    root = tmp_path / "campaign"
+    root.mkdir()
+    worker, reviewer = tmp_path / "worker-python", tmp_path / "reviewer-codex"
+    worker.write_text(
+        f"#!{sys.executable}\nimport json,sys\n"
+        "print(json.dumps({'argv':sys.argv[1:]}))\n"
+        "print(json.dumps({'type':'provider_request','request_id':'worker-request',"
+        "'status':'succeeded','usage':{'input_tokens':11,'output_tokens':3}}))\n"
+    )
+    reviewer.write_text(
+        f"#!{sys.executable}\nimport json,sys\n"
+        "print(json.dumps({'argv':sys.argv[1:]}))\n"
+        "print(json.dumps({'type':'thread.started','thread_id':'review-thread'}))\n"
+        "print(json.dumps({'type':'item.completed','item':"
+        "{'type':'agent_message','text':'{\"decision\":\"needs_revision\"}'}}))\n"
+        "print(json.dumps({'type':'turn.completed','usage':{'input_tokens':7,'output_tokens':2}}))\n"
+    )
+    for path in (worker, reviewer):
+        path.chmod(0o700)
+    args = argparse.Namespace(
+        campaign=root, state_dir=root / "supervisor", wall_seconds=30, turn_seconds=10,
+        backend="builtin", model="deepseek-flash", provider_config="private-provider.json",
+        judge_backend="codex", judge_model="gpt-6.1-sol", judge_executable=str(reviewer),
+        judge_reasoning_effort="high", workflow="frontier",
+    )
+    supervisor = AgentSupervisor(args)
+    monkeypatch.setattr(sys, "executable", str(worker))
+    for judge in (False, True):
+        directory = supervisor.directory / ("judge" if judge else "worker")
+        directory.mkdir()
+        assert supervisor.launch(directory, "Inspect existing evidence.", judge=judge) == 0
+        argv = json.loads((directory / "response.json").read_text().splitlines()[0])["argv"]
+        if judge:
+            assert argv[0] == "exec"
+            assert "--ephemeral" in argv and "read-only" in argv
+            assert argv[argv.index("--model") + 1] == "gpt-6.1-sol"
+            assert 'model_reasoning_effort="high"' in argv
+            assert "--provider-config" not in argv
+            assert parse_judge_stream(directory / "response.json", supervisor.review_backend()) == {
+                "decision": "needs_revision"
+            }
+        else:
+            assert argv[:2] == ["-m", "conjecture_solver.workspace_agent"]
+            assert argv[argv.index("--model") + 1] == "deepseek-flash"
+            assert argv[argv.index("--provider-config") + 1] == "private-provider.json"
+            assert "--judge" not in argv
+    assert supervisor.state["usage_by_thread"]["worker"]["input_tokens"] == 11
+    assert supervisor.state["usage_by_thread"]["review-thread"]["input_tokens"] == 7
+    assert supervisor.state["usage_roles_by_thread"] == {
+        "worker": "worker", "review-thread": "reviewer",
+    }
+    assert not supervisor.state.get("worker_cursor")
+
+
+def test_native_worker_and_api_reviewer_keep_separate_connections_and_cursor(tmp_path, monkeypatch):
+    import sys
+
+    root = tmp_path / "campaign"
+    root.mkdir()
+    native, api = tmp_path / "native", tmp_path / "api-python"
+    native.write_text(
+        f"#!{sys.executable}\nimport json,sys\n"
+        "print(json.dumps({'argv':sys.argv[1:]}))\n"
+        "print(json.dumps({'type':'thread.started','thread_id':'worker-thread'}))\n"
+        "print(json.dumps({'type':'turn.completed','usage':{'input_tokens':7,'output_tokens':2}}))\n"
+    )
+    api.write_text(
+        f"#!{sys.executable}\nimport json,sys\n"
+        "print(json.dumps({'argv':sys.argv[1:]}))\n"
+        "print(json.dumps({'type':'provider_request','request_id':'review-request',"
+        "'status':'succeeded','usage':{'input_tokens':11,'output_tokens':3}}))\n"
+        "print(json.dumps({'type':'result','subtype':'success','result':'{\"decision\":\"ok\"}'}))\n"
+    )
+    for path in (native, api):
+        path.chmod(0o700)
+    args = argparse.Namespace(
+        campaign=root, state_dir=root / "supervisor", wall_seconds=30, turn_seconds=10,
+        backend="codex", executable=str(native), model="worker", judge_model="reviewer",
+        judge_backend="builtin", judge_provider_config="private-reviewer.json", workflow="frontier",
+    )
+    supervisor = AgentSupervisor(args)
+    monkeypatch.setattr(sys, "executable", str(api))
+    for name, judge in [("worker", False), ("reviewer", True), ("worker-resume", False)]:
+        directory = supervisor.directory / name
+        directory.mkdir()
+        assert supervisor.launch(directory, "Transport fixture, no model call.", judge=judge) == 0
+        argv = json.loads((directory / "response.json").read_text().splitlines()[0])["argv"]
+        if judge:
+            assert "--judge" in argv
+            assert argv[argv.index("--provider-config") + 1] == "private-reviewer.json"
+            assert parse_judge_stream(directory / "response.json", supervisor.review_backend()) == {
+                "decision": "ok"
+            }
+        elif name == "worker-resume":
+            assert argv[:3] == ["exec", "resume", "worker-thread"]
+    assert supervisor.state["worker_cursor"] == "worker-thread"
+    assert supervisor.state["usage_roles_by_thread"]["reviewer"] == "reviewer"
+    assert supervisor.state["usage_by_thread"]["reviewer"]["input_tokens"] == 11
 
 
 @pytest.mark.parametrize(

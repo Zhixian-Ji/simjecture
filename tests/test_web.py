@@ -411,9 +411,11 @@ def test_read_only_web_application_rejects_mutations(tmp_path: Path) -> None:
     }
 
 
+@pytest.mark.parametrize("mixed_backend", [False, True])
 def test_create_campaign_uses_structured_launch_contract(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    mixed_backend: bool,
 ) -> None:
     from conjecture_solver.web import application as web_application
 
@@ -439,8 +441,14 @@ def test_create_campaign_uses_structured_launch_contract(
         scan_roots=(tmp_path / "empty",),
         runs_root=tmp_path / "runs",
     )
+    roles = dict(
+        backend="builtin", model="worker-model", provider_config="/private/worker.json",
+        judge_backend="codex", judge_model="review-model", judge_executable="codex-wrapper",
+        judge_reasoning_effort="high",
+    ) if mixed_backend else {}
     result = application.create_campaign(
         {
+            **roles,
             "hypothesis": "A bounded hypothesis is falsifiable.",
             "instruction": "Prefer the installed numerical skill.",
             "campaign_id": "campaign-web-test",
@@ -458,7 +466,13 @@ def test_create_campaign_uses_structured_launch_contract(
     assert request.max_command_seconds == 120
     assert request.engine == "native"
     assert request.mode == "minimal"
-    assert request.backend == "codex-glm"
+    assert request.backend == ("builtin" if mixed_backend else "codex-glm")
+    if mixed_backend:
+        assert request.provider_config == "/private/worker.json"
+        assert request.judge_backend == "codex"
+        assert request.judge_model == "review-model"
+        assert request.judge_executable == "codex-wrapper"
+        assert request.judge_reasoning_effort == "high"
     assert request.capability_directory == "/operator/installed-capabilities"
     assert captured["closed"] is True
     assert result["pid"] == 4321

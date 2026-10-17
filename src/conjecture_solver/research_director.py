@@ -365,7 +365,7 @@ claim review accepts unresolved, while exploratory reports use report assessment
                 raise ValueError(f"Director exited with {rc}")
             verdict = DirectorVerdict.model_validate(
                 parse_judge_stream(
-                    d / "response.json", self.args.backend, allow_readonly_tools=True
+                    d / "response.json", self.review_backend(), allow_readonly_tools=True
                 )
             ).model_dump()
             known = {r["id"] for r in packet["active_experiments"]}

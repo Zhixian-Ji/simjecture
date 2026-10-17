@@ -220,7 +220,7 @@ class ResearchFinalization:
             raise ValueError(f"Report reviewer exited with {rc}; report remains unreviewed")
         verdict = ReportAssessment.model_validate(
             parse_judge_stream(
-                directory / "response.json", self.args.backend, allow_readonly_tools=True
+                directory / "response.json", self.review_backend(), allow_readonly_tools=True
             )
         )
         if _sha(frozen / "RESULTS.md") != packet["report_sha256"]:
@@ -301,7 +301,9 @@ class ResearchFinalization:
                     )
                 verdict = ReportAssessment.model_validate(
                     parse_judge_stream(
-                        directory / "response.json", self.args.backend, allow_readonly_tools=True
+                        directory / "response.json",
+                        self.review_backend(),
+                        allow_readonly_tools=True,
                     )
                 )
                 self.service.report_assessment_status(request["id"])

@@ -11,6 +11,7 @@ from typing import Literal
 
 from pydantic import Field
 
+from .agent_routes import review_route
 from .mvp_launch import (
     MVPLaunchPlan,
     MVPLaunchRequest,
@@ -33,6 +34,9 @@ class NativeStudyRequest(MVPLaunchRequest):
     provider_config: str | None = None
     model: str | None = None
     judge_model: str | None = None
+    judge_backend: Literal["codex-glm", "codex", "grok", "agy", "builtin"] | None = None
+    judge_executable: str | None = None
+    judge_provider_config: str | None = None
     reasoning_effort: Literal["low", "medium", "high", "xhigh", "max", "ultra"] | None = None
     judge_reasoning_effort: Literal["low", "medium", "high", "xhigh", "max", "ultra"] | None = None
     director_enabled: bool = Field(default=True, strict=True)
@@ -64,6 +68,18 @@ def materialize_native(request, *, resume=False):
             raise ValueError("Built-in research uses minimal mode")
     elif shutil.which(executable) is None:
         raise ValueError(f"Backend executable {executable!r} not found; install its CLI first")
+    review = review_route(
+        request.backend, executable, request.provider_config,
+        judge_backend=request.judge_backend, judge_executable=request.judge_executable,
+        judge_provider_config=request.judge_provider_config,
+    )
+    if review["backend"] == "builtin":
+        from .workspace_agent import read_provider, require_runtime
+
+        require_runtime()
+        read_provider(review["provider_config"])
+    elif shutil.which(review["executable"]) is None:
+        raise ValueError("Reviewer executable not found; install its CLI first")
     if request.engine != "native":
         raise ValueError("Native study modes cannot use the legacy DSH engine")
     identity = load_supervisor_record(root) if root.exists() else None
@@ -209,6 +225,10 @@ def materialize_native(request, *, resume=False):
             argv += ["--machine", machine]
     if request.agent_executable:
         argv += ["--executable", request.agent_executable]
+    for name in ("judge_backend", "judge_executable", "judge_provider_config"):
+        value = getattr(request, name)
+        if value:
+            argv += ["--" + name.replace("_", "-"), value]
     argv += ["--completion-policy", request.completion_policy]
     if request.provider_config:
         argv += ["--provider-config", request.provider_config]

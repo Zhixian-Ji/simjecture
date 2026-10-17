@@ -737,10 +737,15 @@
                       </select>
                       <label class="research-director-option"><input id="research-director" type="checkbox" checked /><span>Research director · stop and replan expensive experiments</span></label>
                       <p class="field-help">Reviews strategy while jobs run, preserves partial data on stops, and asks the worker to acknowledge a new plan. Scientific claim review stays separate.</p>
-                      <label for="review-model">Reviewer and director model (optional)</label>
+                      <div id="review-agent-settings">
+                      <label for="review-backend">Reviewer and director agent</label>
+                      <select id="review-backend"><option value="">Same as conversation agent</option></select>
+                      <p id="review-agent-help" class="field-help">Use another installed CLI or the API in Connections. Each review starts in a separate context.</p>
+                      <label for="review-model">Reviewer and director model</label>
                       <input id="review-model" placeholder="Default: conversation agent model" />
                       <label for="review-effort">Reviewer and director reasoning</label>
                       <select id="review-effort"><option value="">Use agent setting</option><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="xhigh">Extra high</option></select>
+                      </div>
                       <label for="execution-backend"
                         >Experiment environment</label
                       ><select id="execution-backend">

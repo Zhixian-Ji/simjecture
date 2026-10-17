@@ -1570,7 +1570,7 @@ async function boot() {
     for(const name of ["machines","settings"])document.querySelector(`[data-view="${name}"]`).hidden=true;
     for(const id of ["connect-research-tool","tools-open-machines","connection-button","continuation-chat"])$(id).hidden=true;
     if(data.hosting.wall_seconds===null){$("brief-hours").removeAttribute("max");$("brief-hours").min="0";$("brief-hours").value="0";document.querySelector('label[for="brief-hours"]').textContent="Time budget (hours; 0 = unlimited)";}else{$("brief-hours").max=String(data.hosting.wall_seconds/3600);$("brief-hours").value=$("brief-hours").max;}
-    for(const id of ["execution-backend","study-machines","research-director","review-model","review-effort"])$(id).disabled=true;
+    for(const id of ["execution-backend","study-machines","research-director","review-backend","review-model","review-effort"])$(id).disabled=true;
     $("research-director").checked=false;
     $("research-director").closest("label").hidden=true;
     $("brief-policy").value="answer";
@@ -1578,8 +1578,20 @@ async function boot() {
     $("first-request-help").textContent="Enter to send · Shift + Enter for a new line. The hosted agent and compute are ready.";
     $("execution-backend").replaceChildren(new Option("Managed experiments","trusted-template"));
     $("review-model").placeholder="Assigned by the host";
+    $("review-agent-help").textContent="The review agent is managed by the host.";
     document.querySelector(".research-tools-heading .lead").textContent="Verified tools provided for this hosted workspace.";
   }
+  const reviewBackend = $("review-backend");
+  for (const cli of state.settings.clis || [])
+    if (cli.path) reviewBackend.add(new Option(`${cli.id} · local CLI`, cli.id));
+  reviewBackend.add(new Option("Compatible API · Connections", "builtin"));
+  reviewBackend.onchange = () => {
+    const different = reviewBackend.value && reviewBackend.value !== state.project?.agent?.backend;
+    $("review-model").required = Boolean(different);
+    $("review-model").placeholder = different ? "Model ID for the selected agent" : "Default: conversation agent model";
+    $("review-effort").disabled = hosted || reviewBackend.value === "agy";
+    if (reviewBackend.value === "agy") $("review-effort").value = "";
+  };
   const execution = data.settings.execution;
   $("execution-backend").value = execution?.backend || "bubblewrap";
   let executionNoticeKey = "";
@@ -1878,6 +1890,7 @@ async function launchStudy() {
     director_enabled: $("research-director").checked,
     allow_solver_development: $("solver-development").checked,
     judge_model: $("review-model").value.trim(),
+    judge_backend: $("review-backend").value || null,
     judge_reasoning_effort: $("review-effort").value || null,
   });
   const project = await api(`project?id=${encodeURIComponent(id)}`);

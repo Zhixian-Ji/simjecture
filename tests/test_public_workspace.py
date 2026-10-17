@@ -67,6 +67,17 @@ def test_hosted_solver_permission_cannot_be_expanded_by_the_client(app):
     assert client.get(f"/api/workspace/project?id={p['id']}").json()["studies"] == []
 
 
+def test_hosted_reviewer_backend_is_managed_by_the_host(app):
+    client = session(app)
+    p = project(client)
+    response = client.post("/api/workspace/launch", json={
+        "project": p["id"], "judge_backend": "codex", "judge_model": "operator-model",
+    })
+    assert response.status_code == 403
+    assert "managed by the host" in response.text
+    assert client.get(f"/api/workspace/project?id={p['id']}").json()["studies"] == []
+
+
 def test_shared_assets_and_hosted_bootstrap_never_expose_credentials(app):
     client = session(app)
     app.state.login.credentials = {

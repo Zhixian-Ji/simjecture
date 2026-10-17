@@ -299,7 +299,7 @@ SCHEMA:
                     raise ValueError(f"Oversight exited with {rc}")
                 verdict = OversightVerdict.model_validate(
                     parse_judge_stream(
-                        turn / "response.json", self.args.backend, allow_readonly_tools=True
+                        turn / "response.json", self.review_backend(), allow_readonly_tools=True
                     )
                 ).model_dump()
                 put(turn / "response-verdict.json", verdict)

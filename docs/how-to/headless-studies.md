@@ -51,6 +51,37 @@ The launch prints activity, backend/model, remaining time and experiment/review
 counts. Redirected output uses periodic plain status lines; `--quiet` suppresses
 progress. A study can make paid provider requests through the agent you selected.
 
+The director and independent reviewers use the worker's backend by default. To
+use a different backend for these roles, set `--judge-backend` and
+`--judge-model`; `--judge-executable` selects its CLI or wrapper. For example,
+an API worker can use an independently authenticated Codex reviewer:
+
+```bash
+simjecture study --campaign ./runs/api-worker-native-review \
+  --hypothesis-file hypothesis.txt --instructions-file instructions.md \
+  --backend builtin --provider-config /private/worker-provider.json \
+  --model WORKER_MODEL --judge-backend codex --judge-model REVIEW_MODEL \
+  --judge-reasoning-effort high --wall-seconds 3600
+```
+
+Install the `workspace` extra for the built-in API agent. A built-in reviewer
+can use its own `--judge-provider-config`; it inherits the worker's provider
+configuration when both use the built-in backend and no separate file is given.
+Native reviewers likewise inherit the worker's CLI wrapper when sharing its
+backend. A different backend uses its own CLI and login. Role settings are saved
+with the launch request and reused on resume, including browser resumes. The
+director and reviewers keep separate contexts and the existing review tool
+restrictions; selecting another backend does not relax evidence requirements.
+
+In the workspace, edit the proposal, open **Execution settings**, and choose
+**Reviewer and director agent**, its model and reasoning effort. The worker stays
+with the conversation's selected agent. An API reviewer uses the endpoint saved
+in **Connections**; its settings are frozen separately for that study. The hosted
+demo keeps its agents managed by the host. Existing studies retain their saved
+roles; these controls select roles for a new study and do not change a running one.
+
+![Separate reviewer agent in the study settings](../_static/guides/review-backend-desktop.png)
+
 An operator can [extend an active study](extend-study.md) without relaunching it:
 `simjecture study extend --campaign ./runs/my-study --hours 12`.
 Use `simjecture study budget --campaign ./runs/my-study` for its current clock.
