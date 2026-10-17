@@ -61,7 +61,18 @@ def context_metadata(request):
             )
         )
     tools = json.dumps(request.get("tools", []), sort_keys=True, default=str).encode()
-    return dict(messages=messages, tool_schema_bytes=len(tools))
+    output_limits = {
+        key: number(request[key])
+        for key in ("max_tokens", "max_completion_tokens", "max_output_tokens")
+        if number(request.get(key)) is not None
+    }
+    return dict(
+        messages=messages,
+        tool_schema_bytes=len(tools),
+        output_budget=dict(
+            source="request" if output_limits else "provider_default", limits=output_limits
+        ),
+    )
 
 
 def request_accounting(path):

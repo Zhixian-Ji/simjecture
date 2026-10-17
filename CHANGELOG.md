@@ -4,6 +4,11 @@ This project follows semantic versioning. Dates use ISO 8601.
 
 ## Unreleased
 
+- Use provider output-token defaults for built-in API workers and reviewers.
+  Remove the implicit 8K worker and 32K reviewer ceilings, honor an explicit
+  provider-profile `max_tokens`, and record output-budget selection in request
+  metadata. Clarify that this API adapter runs independently of legacy DSH.
+
 - Preserve recent API-worker tool history across autonomous research checkpoints.
   Reaching the action limit now saves an incomplete checkpoint without spending
   another request on a tool-free summary. Reviewers retain independent contexts.

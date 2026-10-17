@@ -69,6 +69,9 @@ another workflow. `--backend` selects `codex-glm`, `codex`, `grok`, `agy` or
 available. `builtin` uses a private `--provider-config` file and requires the
 workspace extra; it supports minimal mode only. Keep provider credentials out of
 committed files and shared records.
+The built-in API agent uses smolagents directly, independently of the legacy DSH
+integration. API output-token budgets use provider defaults unless the private
+provider profile explicitly sets `max_tokens`.
 API research workers retain the preceding turn's structured tool calls and results
 alongside the current evidence brief. Their action limit creates an incomplete
 checkpoint, not a research conclusion or an extra model-generated summary.

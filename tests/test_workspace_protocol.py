@@ -66,6 +66,35 @@ def response(*calls, text=None):
     }
 
 
+@pytest.mark.parametrize("judge", [False, True])
+@pytest.mark.parametrize("limit", [None, 65536])
+def test_api_turns_use_provider_output_default_or_explicit_profile_budget(
+    tmp_path, api, judge, limit
+):
+    url, requests, responses = api
+    config = dict(model="deepseek-flash", base_url=url)
+    if limit is not None:
+        config["max_tokens"] = limit
+    answer = '{"decision":"revise"}' if judge else "Completed requested work."
+    responses.append(
+        response(text=answer) if judge else response(("finish", "final_answer", {"answer": answer}))
+    )
+    assert (
+        wa.run_agent("Perform this turn.", tmp_path, config, judge=judge, wall_seconds=30) == answer
+    )
+    assert len(requests) == 1
+    if limit is None:
+        assert not {"max_tokens", "max_completion_tokens", "max_output_tokens"} & requests[0].keys()
+    else:
+        assert requests[0]["max_tokens"] == limit
+
+
+@pytest.mark.parametrize("limit", [0, -1, True, 1.5, "8192"])
+def test_invalid_profile_output_budget_is_rejected_before_request(limit):
+    with pytest.raises(ValueError, match="max_tokens must be a positive integer"):
+        wa.model_for(dict(model="deepseek-flash", base_url="http://127.0.0.1:1", max_tokens=limit))
+
+
 def test_native_parallel_results_preserve_ids_and_reasoning(tmp_path, api):
     url, requests, responses = api
     (tmp_path / "a").write_text("alpha")

@@ -153,6 +153,7 @@ how-to/simote-agent-roles
 :caption: Reference and contributing
 
 reference/cli
+reference/default-limits
 reference/repository-map
 development/contributing
 development/documentation
