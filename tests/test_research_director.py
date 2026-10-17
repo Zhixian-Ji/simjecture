@@ -41,7 +41,7 @@ def active(sup, monkeypatch, *, timeout=700):
 
 def answer(
     sup, monkeypatch, stops, decision="replan", *, budget="infeasible",
-    wake_worker=False, time_request=None,
+    wake_worker=False, time_request=None, park_worker=False,
 ):
     verdict = dict(
         decision=decision,
@@ -50,6 +50,7 @@ def answer(
         budget_feasibility=budget,
         stop_experiments=stops,
         wake_worker=wake_worker,
+        park_worker=park_worker,
         time_request=time_request,
         next_action=(
             "Commission a cheaper complete trajectory with adaptive stepping and accuracy checks."
@@ -277,6 +278,33 @@ def test_unchanged_healthy_job_has_bounded_fewer_model_reviews(tmp_path, monkeyp
     sup.run_director()
     assert sup.state["director_count"] == 2
     assert sup.state["director_deferred_count"] == 2
+
+
+def test_director_parking_does_not_trigger_another_strategy_review(tmp_path, monkeypatch):
+    clock = [1000.0]
+    monkeypatch.setattr("time.time", lambda: clock[0])
+    sup = supervisor(tmp_path, wall_seconds=7200)
+    sup.state["round"] = 2
+    answer(sup, monkeypatch, [], decision="continue", park_worker=True)
+    sup.run_director(force=True)
+    assert sup.service.waiting_status()["status"] == "waiting"
+    for now in [1300, 1600]:
+        clock[0] = now
+        assert not sup.run_director()
+    assert sup.state["director_count"] == 1
+
+    clock[0] = 1900
+    sup.run_director()
+    assert sup.state["director_count"] == 2
+    clock[0] = 2200
+    assert not sup.run_director()
+    assert sup.state["director_count"] == 2
+
+    # A real new plan must still interrupt the longer idle review cadence.
+    sup.service.note("A new bounded diagnostic fits within the remaining budget.", kind="next_test")
+    clock[0] = 2500
+    sup.run_director()
+    assert sup.state["director_count"] == 3
 
 
 @pytest.mark.parametrize("change", ["new_plan", "stale_monitor", "runtime_risk", "transport"])

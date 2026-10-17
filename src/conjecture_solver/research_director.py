@@ -485,6 +485,12 @@ claim review accepts unresolved, while exploratory reports use report assessment
                         for_operator=True,
                     )
                     record["worker_wait_action"] = dict(status="parked", wait=wait)
+                    # Parking is this review's action, not new worker evidence.
+                    # Compare the next packet with the wait we just installed;
+                    # otherwise every re-park resets the unchanged-review cadence.
+                    self.state["director_strategy_signature"] = self.director_strategy_signature(
+                        packet | {"worker_wait": wait}
+                    )
                 except (OSError, ValueError) as error:
                     record["worker_wait_action"] = dict(status="rejected", error=str(error)[:500])
                 put(folder / (identifier + ".json"), record)

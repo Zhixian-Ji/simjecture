@@ -4,6 +4,11 @@ This project follows semantic versioning. Dates use ISO 8601.
 
 ## Unreleased
 
+- Keep the configured review backoff after the director parks a research worker.
+  The director's own wait record no longer triggers another model review as if
+  it were new evidence. New plans, results, steering and operational alerts
+  still interrupt deferral.
+
 ## 0.6.2 — 2026-10-16
 
 - Bring the 0.6.2 candidate series into the stable release: project/workspace
