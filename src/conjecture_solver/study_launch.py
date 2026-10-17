@@ -77,7 +77,7 @@ def materialize_native(request, *, resume=False):
         from .workspace_agent import read_provider, require_runtime
 
         require_runtime()
-        read_provider(review["provider_config"])
+        read_provider(review["provider_config"], api_only=True)
     elif shutil.which(review["executable"]) is None:
         raise ValueError("Reviewer executable not found; install its CLI first")
     if request.engine != "native":

@@ -307,7 +307,7 @@ def _run(args):
         from .workspace_agent import read_provider, require_runtime
 
         require_runtime()
-        read_provider(review["provider_config"])
+        read_provider(review["provider_config"], api_only=True)
     elif shutil.which(review["executable"]) is None:
         raise ValueError(f"Reviewer executable {review['executable']!r} not found")
     if args.backend == "builtin":

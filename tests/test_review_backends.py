@@ -1,6 +1,8 @@
 """Mixed-agent launch contracts; no provider requests or scientific solvers."""
 
+import json
 import os
+import sys
 import threading
 from pathlib import Path
 from types import SimpleNamespace
@@ -8,7 +10,7 @@ from types import SimpleNamespace
 import pytest
 
 from conjecture_solver.research_service import ResearchService
-from conjecture_solver.study_launch import resume_native
+from conjecture_solver.study_launch import NativeStudyRequest, materialize_native, resume_native
 from conjecture_solver.web.application import SimjectureWebApplication
 from conjecture_solver.web.workspace import load
 
@@ -86,6 +88,32 @@ def test_workspace_requires_a_model_for_a_different_review_backend(setup):
     with pytest.raises(ValueError, match="model for the separate reviewer"):
         workspace.launch(project, {"request_key": "invalid", "judge_backend": "codex"}, app)
     assert workspace.project(project)["studies"] == []
+
+
+def test_api_review_rejects_a_cli_profile_before_launch_or_dispatch(tmp_path, monkeypatch):
+    from conjecture_solver import workspace_agent
+
+    profile = tmp_path / "cli-profile.json"
+    profile.write_text(json.dumps({
+        "backend": "codex", "model": "fixture", "base_url": "http://localhost",
+    }))
+    request = NativeStudyRequest(
+        hypothesis="A finite claim.", campaign_id="review-profile-fixture",
+        output_directory=str(tmp_path / "study"), backend="codex", model="fixture",
+        agent_executable=sys.executable, judge_backend="builtin", judge_model="fixture",
+        judge_provider_config=str(profile), capability_directory="none",
+    )
+    with pytest.raises(ValueError, match="API reviewer requires an API profile"):
+        materialize_native(request)
+    assert not (tmp_path / "study").exists()
+    monkeypatch.setattr(workspace_agent, "run_external", lambda *a, **kw: pytest.fail(
+        "A review must not dispatch a CLI profile through the writable worker route"
+    ))
+    with pytest.raises(ValueError, match="API reviewer requires an API profile"):
+        workspace_agent.main([
+            "--judge", "--provider-config", str(profile),
+            "--prompt-file", str(tmp_path / "unused.txt"), "--cwd", str(tmp_path),
+        ])
 
 
 def test_browser_selects_a_native_reviewer_for_an_api_worker(setup):

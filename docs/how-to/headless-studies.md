@@ -67,6 +67,8 @@ simjecture study --campaign ./runs/api-worker-native-review \
 Install the `workspace` extra for the built-in API agent. A built-in reviewer
 can use its own `--judge-provider-config`; it inherits the worker's provider
 configuration when both use the built-in backend and no separate file is given.
+API reviewer files must describe an API connection; select a native CLI with
+`--judge-backend` rather than putting a CLI profile in that file.
 Native reviewers likewise inherit the worker's CLI wrapper when sharing its
 backend. A different backend uses its own CLI and login. Role settings are saved
 with the launch request and reused on resume, including browser resumes. The
