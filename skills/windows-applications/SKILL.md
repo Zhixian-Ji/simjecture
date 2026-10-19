@@ -22,6 +22,16 @@ the installed interface without starting a model. A successful check establishes
 interface availability only. The Windows account supplies the applications,
 compatible interpreter, optional libraries and licenses.
 
+Use `windows inspect --application solidworks --installation PATH --python PATH`
+to read the running desktop session's PID, version, active document and open
+document metadata. It reports unsaved changes without saving, editing or closing
+the session. An optional `--project PATH` filters already-open documents; it does
+not open the file. Use the same Windows account and elevation as SOLIDWORKS.
+Inspection verifies the session executable against `--installation`. If several
+sessions match, select one of the reported process IDs with `--pid NUMBER`.
+An explicit PID must still belong to the selected installation; inspection never
+falls back to another session when the selected one is unavailable.
+
 ## Submit native work
 
 `windows submit` requires the application, installation, Windows Python, project,
@@ -40,7 +50,10 @@ Derive argument names and observables from the model and adapter schema.
 - SOLIDWORKS `part.rebuild_export` accepts self-contained `.sldprt` parts,
   `dimensions_si` and `exports` from `step`, `iges`, `stl`. Dimension values are
   metres/radians, independent of display units. This adapter needs Windows
-  `pywin32` and native model commissioning; mock tests are not CAD validation.
+  `pywin32`. Part rebuilding and export have been commissioned on SOLIDWORKS 2025;
+  a particular model still needs its own geometry checks. Batch work starts an
+  owned process and binds its PID-specific automation entry, preserving existing
+  desktop sessions. Mock tests are not CAD validation.
 
 The runner snapshots complete inputs and its native source bundle, then verifies
 the writable copy before application calls. Native scripts execute as trusted
