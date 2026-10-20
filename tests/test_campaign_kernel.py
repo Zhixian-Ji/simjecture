@@ -34,7 +34,9 @@ from conjecture_solver.mvp_agent import (
     MVPWriteFileAction,
     parse_mvp_action,
 )
-from conjecture_solver.mvp_launch import MVPLaunchRequest, materialize_operator_input
+from conjecture_solver.mvp_launch import MVPLaunchRequest
+
+from .legacy_records import write_legacy_launch
 
 
 class _OfflineLiterature:
@@ -192,7 +194,7 @@ def test_existing_dsh_campaign_ignores_only_native_prompt_hash_drift(
     tmp_path: Path,
 ) -> None:
     campaign = tmp_path / "dsh-campaign"
-    materialize_operator_input(
+    write_legacy_launch(
         MVPLaunchRequest(
             campaign_id="dsh_prompt_compatibility",
             hypothesis="DSH role prompts are external to the native runner prompt.",
@@ -215,7 +217,7 @@ def test_existing_native_campaign_rejects_native_prompt_hash_drift(
     tmp_path: Path,
 ) -> None:
     campaign = tmp_path / "native-campaign"
-    materialize_operator_input(
+    write_legacy_launch(
         MVPLaunchRequest(
             campaign_id="native_prompt_compatibility",
             hypothesis="Native campaigns retain an exact prompt identity.",

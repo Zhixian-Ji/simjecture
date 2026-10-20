@@ -123,6 +123,10 @@ def verify(release, destination):
             assert bootstrap["projects"] == []
             assert not bootstrap["settings"]["api_configured"]
             assert bootstrap["knowledge_available"]
+            with urllib.request.urlopen(url + "/api/bootstrap", timeout=2) as response:
+                monitor_bootstrap = json.load(response)
+            assert monitor_bootstrap["modes"] == ["minimal"]
+            assert monitor_bootstrap["default_engine"] == "native"
             for resource in (
                 "/",
                 "/assets/workspace-theme.js",
@@ -197,6 +201,7 @@ def verify(release, destination):
         skill_resources=True,
         hdf5_reader=True,
         knowledge_library=True,
+        minimal_only=True,
     )
     (destination / "result.json").write_text(json.dumps(result, indent=2) + "\n")
     print(json.dumps(result), flush=True)

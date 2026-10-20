@@ -4,21 +4,16 @@ For the scientific workflow, start with [the research loop](../concepts/research
 and [evidence and claims](../concepts/evidence-and-claims.md). This guide documents
 the agent-facing operations used by that workflow.
 
-`simjecture study` defaults to minimal mode for new native-agent studies. The
-native agent chooses its plan, writes code and uses its existing tools; the
-service records evidence and independently reviews claims. Select `--mode
-structured` or `--mode frontier` to use the other workflows. `--workflow` is an
-alias for `--mode`. The `simjecture-supervise` and `simjecture-research` entry
-points use the same launcher.
+`simjecture study` launches minimal research. The agent chooses its plan, writes
+code and uses its tools; the service records evidence and independently reviews
+claims. `--workflow minimal` remains an alias for `--mode minimal`.
+`simjecture-supervise` and `simjecture-research` use the same launcher.
 
-Resume without a mode flag to retain the recorded mode. Changing a study's mode
-requires a new campaign directory; no existing evidence is silently converted.
-Old studies retain their existing scientific-policy schema. The browser and TUI
-launch and monitor minimal, structured and frontier native-agent studies. Select
-mode and backend separately. The built-in API agent (`--backend builtin` with a private `--provider-config`)
-also supports minimal studies; DSH and `mvp` remain explicit legacy choices. Selecting an
-unsupported combination returns an error rather than silently changing modes.
-The `mvp` command remains the legacy API entry point.
+The browser and TUI launch the same workflow. Native CLI backends and the built-in
+API agent (`--backend builtin` with a private `--provider-config`) remain available.
+Existing minimal studies preserve their saved contracts and deadlines. Older
+classical, DSH, structured and frontier runs remain readable but cannot be resumed;
+see [migration](minimal-migration.md). No existing evidence is silently converted.
 
 For installation, a complete launch recipe, and monitoring/resume commands, use
 [Run a headless study](headless-studies.md). The backend uses its existing login.

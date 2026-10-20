@@ -727,7 +727,7 @@ def serve_web(
     open_browser: bool = True,
     read_only: bool = False,
     verbose: bool = False,
-    engine: str = "dsh",
+    engine: str = "native",
 ) -> None:
     application = SimjectureWebApplication(
         initial_run=run_directory,

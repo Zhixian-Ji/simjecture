@@ -15,7 +15,6 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 from ..mvp_launch import (
-    MVPLaunchRequest,
     ReasoningEngine,
     ResumeError,
     load_supervisor_record,
@@ -180,12 +179,14 @@ class SimjectureWebApplication:
         scan_roots: tuple[str | Path, ...] = (),
         runs_root: str | Path = "artifacts",
         allow_mutations: bool = True,
-        default_engine: ReasoningEngine = "dsh",
+        default_engine: ReasoningEngine = "native",
     ) -> None:
         roots = scan_roots or (Path.cwd() / "artifacts", Path.cwd() / "demos")
         self.registry = CampaignRegistry(initial_run=initial_run, scan_roots=roots)
         self.runs_root = Path(runs_root).expanduser().resolve()
         self.allow_mutations = allow_mutations
+        if default_engine != "native":
+            raise ValueError("DSH has been removed; use the minimal research workflow")
         self.default_engine = default_engine
         self._monitors: dict[str, MVPRunMonitor] = {}
         self._lock = threading.RLock()
@@ -238,7 +239,7 @@ class SimjectureWebApplication:
                 "SIMJECTURE_DEFAULT_EXECUTION_BACKEND", "bubblewrap"
             ),
             "default_capabilities": os.environ.get("SIMJECTURE_DEFAULT_CAPABILITIES", ""),
-            "modes": ["minimal", "structured", "frontier", "legacy"],
+            "modes": ["minimal"],
             "selected_campaign": selected,
             "campaigns": campaigns,
         }
@@ -388,54 +389,43 @@ class SimjectureWebApplication:
             from ..study_launch import NativeStudyRequest
 
             mode = payload.get("mode", "minimal")
-            backend = payload.get("backend") or (
-                ("dsh" if self.default_engine == "dsh" else "api")
-                if mode == "legacy"
-                else "codex-glm"
+            from ..mvp_launch import REMOVED_WORKFLOW_MESSAGE
+
+            backend = payload.get("backend") or "codex-glm"
+            if (
+                mode != "minimal"
+                or backend in ["dsh", "api"]
+                or payload.get("engine", "native") != "native"
+            ):
+                raise ValueError(REMOVED_WORKFLOW_MESSAGE)
+            extra = dict(
+                mode=mode,
+                execution_backend=payload.get("execution_backend", "bubblewrap"),
+                backend=backend,
+                model=payload.get("model") or None,
+                agent_executable=payload.get("agent_executable") or None,
+                provider_config=payload.get("provider_config") or None,
+                reasoning_effort=payload.get("reasoning_effort") or None,
+                judge_model=payload.get("judge_model") or None,
+                judge_backend=payload.get("judge_backend") or None,
+                judge_executable=payload.get("judge_executable") or None,
+                judge_provider_config=payload.get("judge_provider_config") or None,
+                judge_reasoning_effort=payload.get("judge_reasoning_effort") or None,
+                allow_solver_development=payload.get("allow_solver_development", True),
             )
-            if mode not in ["minimal", "structured", "frontier", "legacy"]:
-                raise ValueError("Unknown study mode")
-            if mode != "legacy" and backend in ["dsh", "api"]:
-                raise ValueError("DSH/API currently require explicit legacy mode")
-            if mode == "legacy" and payload.get("execution_backend", "bubblewrap") != "bubblewrap":
-                raise ValueError("Cooperative execution requires a native study mode")
-            if mode == "legacy" and backend not in ["dsh", "api"]:
-                raise ValueError("Legacy mode requires DSH or API backend")
-            factory = MVPLaunchRequest if mode == "legacy" else NativeStudyRequest
-            extra = (
-                {}
-                if mode == "legacy"
-                else dict(
-                    mode=mode,
-                    execution_backend=payload.get("execution_backend", "bubblewrap"),
-                    backend=backend,
-                    model=payload.get("model") or None,
-                    agent_executable=payload.get("agent_executable") or None,
-                    provider_config=payload.get("provider_config") or None,
-                    reasoning_effort=payload.get("reasoning_effort") or None,
-                    judge_model=payload.get("judge_model") or None,
-                    judge_backend=payload.get("judge_backend") or None,
-                    judge_executable=payload.get("judge_executable") or None,
-                    judge_provider_config=payload.get("judge_provider_config") or None,
-                    judge_reasoning_effort=payload.get("judge_reasoning_effort") or None,
-                    allow_solver_development=payload.get("allow_solver_development", True)
-                    if mode == "minimal"
-                    else None,
-                )
-            )
-            request = factory(
+            request = NativeStudyRequest(
                 **extra,
                 hypothesis=hypothesis,
                 instruction=instruction,
                 capability_directory=_optional_text(payload, "capability_directory", maximum=4096)
-                or ("auto" if mode != "legacy" else None),
+                or "auto",
                 campaign_id=campaign_id,
                 output_directory=str(self.runs_root / campaign_id),
                 max_wall_seconds=_bounded_float(payload, "max_wall_seconds", 21_600, 1, 604_800),
                 max_command_seconds=_bounded_float(payload, "max_command_seconds", 600, 1, 86_400),
                 max_workspace_mb=_bounded_int(payload, "max_workspace_mb", 512, 1, 1_048_576),
                 max_memory_mb=_bounded_int(payload, "max_memory_mb", 4096, 1, 1_048_576),
-                engine=("dsh" if mode == "legacy" and backend == "dsh" else "native"),
+                engine="native",
             )
         except ValueError as error:
             raise WebApplicationError(str(error), status=400) from error
@@ -1036,9 +1026,7 @@ def _execution_label(action_name: str, capability: str | None) -> str:
 
 def _control_capabilities(root: Path, *, phase: RunPhase, live: bool) -> dict[str, Any]:
     terminal = phase in {RunPhase.COMPLETED, RunPhase.CANCELLED, RunPhase.BUDGET_EXHAUSTED}
-    launch = (root / "operator_input" / "launch.json").is_file() or (
-        root / "study-launch.json"
-    ).is_file()
+    launch = (root / "study-launch.json").is_file() and (root / "research.json").is_file()
     return {
         "can_pause": live and phase is not RunPhase.PAUSED,
         "can_resume": not live and not terminal and launch,

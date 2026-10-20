@@ -40,18 +40,12 @@ jobs:
             --ro-bind /lib64 /lib64 \
             /usr/bin/true
       - name: Install locked test environment
-        run: uv sync --frozen --extra tui --extra dsh --extra workspace --extra public --group browser
+        run: uv sync --frozen --extra tui --extra mcp --extra workspace --extra public --group browser
       - name: Install browser test runtime
         run: uv run playwright install --with-deps chromium
       - uses: actions/setup-node@v4
         with:
           node-version: "22.23.1"
-          cache: npm
-          cache-dependency-path: integrations/dsh/package-lock.json
-      - name: Install pinned DSH test runtime
-        run: npm ci --prefix integrations/dsh
-      - name: Test DSH adapter and real MCP profile
-        run: SIMJECTURE_MCP_EXECUTABLE="$PWD/.venv/bin/simjecture-mcp" npm test --prefix integrations/dsh
       - name: Lint release source
         run: uv run ruff check .
       - name: Test release source

@@ -60,7 +60,7 @@ process = ["psutil>=6,<8"]
 tui = [
   "textual>=2.0,<9",
 ]
-dsh = [
+mcp = [
   "mcp>=2,<3",
 ]
 flash-demo = [
@@ -141,15 +141,6 @@ exclude = [
 "src/conjecture_solver/vendor/cylinder_lbm/data" = "conjecture_solver/vendor/cylinder_lbm/data"
 "skills" = "conjecture_solver/builtin_skills"
 "capabilities" = "conjecture_solver/builtin_capabilities"
-"integrations/dsh/package.json" = "conjecture_solver/dsh_bundle/package.json"
-"integrations/dsh/cordis.patch.yml" = "conjecture_solver/dsh_bundle/cordis.patch.yml"
-"integrations/dsh/README.md" = "conjecture_solver/dsh_bundle/README.md"
-"integrations/dsh/research-tools.js" = "conjecture_solver/dsh_bundle/research-tools.js"
-"integrations/dsh/runner.js" = "conjecture_solver/dsh_bundle/runner.js"
-"integrations/dsh/adjudicator.js" = "conjecture_solver/dsh_bundle/adjudicator.js"
-"integrations/dsh/roles.js" = "conjecture_solver/dsh_bundle/roles.js"
-"integrations/dsh/job-waiter.js" = "conjecture_solver/dsh_bundle/job-waiter.js"
-"integrations/dsh/context-elider.js" = "conjecture_solver/dsh_bundle/context-elider.js"
 
 [tool.pytest.ini_options]
 addopts = "-ra --strict-markers"

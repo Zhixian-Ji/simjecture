@@ -1,9 +1,8 @@
-"""Build matching Python/DSH artifacts and a Linux launch archive."""
+"""Build Python artifacts and a Linux launch archive."""
 
 from __future__ import annotations
 
 import hashlib
-import json
 import shutil
 import subprocess
 import tarfile
@@ -16,9 +15,6 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def main() -> None:
     version = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]["version"]
-    package = json.loads((ROOT / "integrations/dsh/package.json").read_text())
-    if package["version"] != version:
-        raise SystemExit("Python and DSH bundle versions must match")
     output = ROOT / "artifacts" / "releases" / f"v{version}"
     output.mkdir(parents=True, exist_ok=True)
     # Never package a previously launched directory: it may contain credentials,
@@ -28,11 +24,6 @@ def main() -> None:
         packages = launch / "packages"
         packages.mkdir(parents=True)
         subprocess.run(["uv", "build", "--out-dir", str(packages)], cwd=ROOT, check=True)
-        subprocess.run(
-            ["npm", "pack", "./integrations/dsh", "--pack-destination", str(packages)],
-            cwd=ROOT,
-            check=True,
-        )
         (packages / ".gitignore").unlink(missing_ok=True)  # uv's build-directory marker
         for source in (ROOT / "packaging/launch").iterdir():
             shutil.copy2(source, launch / source.name)
@@ -60,7 +51,7 @@ def main() -> None:
             *sorted(
                 p
                 for p in (output / "packages").iterdir()
-                if p.name.endswith((".whl", ".tar.gz", ".tgz"))
+                if p.name.endswith((".whl", ".tar.gz"))
             ),
         ]
         (output / "SHA256SUMS").write_text(

@@ -3,7 +3,7 @@
 The bridge is intentionally a thin adapter.  It owns no scientific state and
 does not import the optional MCP SDK or :mod:`campaign_kernel` at module import
 time.  This lets schema tests and kernel fakes run in the base installation,
-while ``simjecture-mcp`` remains a normal stdio MCP server when the ``dsh``
+while ``simjecture-mcp`` remains a normal stdio MCP server when the ``mcp``
 extra is installed.
 """
 
@@ -1587,7 +1587,7 @@ def create_mcp_server(bridge: CampaignMCPBridge | None = None) -> Any:
             from mcp.server import Server
     except ImportError as error:  # pragma: no cover - depends on optional extra
         raise MCPBridgeError(
-            "the MCP SDK is optional; install simjecture[dsh] to run simjecture-mcp"
+            "the MCP SDK is optional; install simjecture[mcp] to run simjecture-mcp"
         ) from error
 
     active_bridge = bridge or CampaignMCPBridge.from_environment()

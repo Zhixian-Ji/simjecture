@@ -260,13 +260,7 @@ class NewRunScreen(Screen[None]):
                 "optional operational constraint and does not change claim identity.",
                 id="form-intro",
             )
-            yield Label("Mode", classes="form-label")
-            yield Select(
-                [(x.title(), x) for x in ["minimal", "structured", "frontier", "legacy"]],
-                value="minimal",
-                allow_blank=False,
-                id="study-mode",
-            )
+            yield Static("Minimal research", id="study-mode")
             yield Label("Experiment execution", classes="form-label")
             yield Select(
                 [
@@ -280,7 +274,7 @@ class NewRunScreen(Screen[None]):
             )
             yield Label("Backend", classes="form-label")
             yield Select(
-                [(x, x) for x in ["codex-glm", "codex", "grok", "agy", "dsh", "api"]],
+                [(x, x) for x in ["codex-glm", "codex", "grok", "agy"]],
                 value="codex-glm",
                 allow_blank=False,
                 id="study-backend",
@@ -300,16 +294,8 @@ class NewRunScreen(Screen[None]):
             )
             yield Label("Maximum wall time (seconds)", classes="form-label")
             yield Input(value="21600", id="max-wall-seconds", type="number")
-            yield Label("Agent watchdog / legacy command time (seconds)", classes="form-label")
+            yield Label("Agent watchdog (seconds)", classes="form-label")
             yield Input(value="600", id="max-command-seconds", type="number")
-            yield Static(
-                "Workspace/memory fields below apply only to legacy mode. "
-                "Minimal uses 4 GiB per experiment / 8 GiB recorded storage."
-            )
-            yield Label("Legacy workspace limit (MB)", classes="form-label")
-            yield Input(value="512", id="max-workspace-mb", type="number")
-            yield Label("Legacy memory limit (MB)", classes="form-label")
-            yield Input(value="4096", id="max-memory-mb", type="number")
             yield Label("Tool access (advanced)", classes="form-label")
             yield Input(
                 value="auto",
@@ -379,8 +365,6 @@ class NewRunScreen(Screen[None]):
         try:
             wall = float(self.query_one("#max-wall-seconds", Input).value)
             command = float(self.query_one("#max-command-seconds", Input).value)
-            workspace = int(float(self.query_one("#max-workspace-mb", Input).value))
-            memory = int(float(self.query_one("#max-memory-mb", Input).value))
         except ValueError:
             self.last_error = "Resource fields must be positive numbers."
             error_widget.update(self.last_error)
@@ -403,7 +387,7 @@ class NewRunScreen(Screen[None]):
             self.last_error = "An output directory is required."
             error_widget.update(self.last_error)
             return None
-        if min(wall, command, workspace, memory) <= 0:
+        if min(wall, command) <= 0:
             self.last_error = "Resource limits must be greater than zero."
             error_widget.update(self.last_error)
             return None
@@ -413,32 +397,14 @@ class NewRunScreen(Screen[None]):
 
         backend = str(self.query_one("#study-backend", Select).value)
         model = self.query_one("#study-model", Input).value.strip() or None
-        mode = str(self.query_one("#study-mode", Select).value)
-        if (mode == "legacy") != (backend in ["dsh", "api"]):
-            error_widget.update("DSH/API require legacy mode; native agents use the other modes.")
-            return None
-        if mode != "legacy" and backend != "codex-glm" and model is None:
+        if backend != "codex-glm" and model is None:
             error_widget.update("Choose the model for the selected backend.")
             return None
-        if mode == "legacy" and self.query_one("#execution-backend", Select).value != "bubblewrap":
-            error_widget.update("Cooperative execution requires a native study mode.")
-            return None
-        factory = MVPLaunchRequest if mode == "legacy" else NativeStudyRequest
-        capabilities = self.query_one("#capability-directory", Input).value.strip() or None
-        if mode == "legacy" and capabilities == "auto":
-            capabilities = None
-        extra = (
-            dict(engine="dsh" if backend == "dsh" else "native")
-            if mode == "legacy"
-            else dict(
-                mode=mode,
-                backend=backend,
-                model=model,
-                execution_backend=str(self.query_one("#execution-backend", Select).value),
-            )
-        )
-        return factory(
-            **extra,
+        capabilities = self.query_one("#capability-directory", Input).value.strip() or "none"
+        return NativeStudyRequest(
+            backend=backend,
+            model=model,
+            execution_backend=str(self.query_one("#execution-backend", Select).value),
             hypothesis=hypothesis,
             instruction=instruction or None,
             capability_directory=capabilities,
@@ -446,8 +412,6 @@ class NewRunScreen(Screen[None]):
             output_directory=str(Path(output).expanduser()),
             max_wall_seconds=wall,
             max_command_seconds=command,
-            max_workspace_mb=workspace,
-            max_memory_mb=memory,
         )
 
 

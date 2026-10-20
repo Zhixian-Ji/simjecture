@@ -15,7 +15,7 @@ def fixture(tmp_path):
     source.mkdir()
     for name in ("pyproject.toml", "uv.lock", "README.md", "LICENSE"):
         (source / name).write_text("fixture")
-    for name in ("src", "skills", "capabilities", "integrations", "scripts", "environments"):
+    for name in ("src", "skills", "capabilities", "scripts", "environments"):
         (source / name).mkdir()
     (source / "src/module.py").write_text('print("fixture")')
     (source / "src/__pycache__").mkdir()

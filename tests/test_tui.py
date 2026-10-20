@@ -13,7 +13,6 @@ from textual.widgets import Input, ListView, Static, TextArea
 from conjecture_solver.mvp_launch import (
     ManagedCampaign,
     MVPLaunchPlan,
-    MVPLaunchRequest,
     ProcessIdentity,
     load_supervisor_record,
     read_process_identity,
@@ -405,9 +404,14 @@ def test_graceful_cancel_signals_only_verified_identity() -> None:
 def test_tui_cancel_uses_managed_process(tmp_path: Path) -> None:
     output = tmp_path / "managed"
     output.mkdir()
-    request = MVPLaunchRequest(
+    from conjecture_solver.study_launch import NativeStudyRequest
+
+    request = NativeStudyRequest(
         hypothesis="Cancel must use a verified child process identity.",
         campaign_id="campaign-cancel-ui",
+        agent_executable=sys.executable,
+        capability_directory=None,
+        execution_backend="process-cooperative",
         output_directory=str(output),
     )
     from conjecture_solver.mvp_launch import materialize_operator_input
@@ -416,6 +420,7 @@ def test_tui_cancel_uses_managed_process(tmp_path: Path) -> None:
         update={"argv": tuple(_sleep_command())}
     )
     campaign = start_managed_campaign(plan)
+    write_supervisor_record(output, campaign.identity)
     app = ConjectureSolverApp(output)
     app.managed = campaign
 

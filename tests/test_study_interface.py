@@ -56,7 +56,7 @@ def test_browser_defaults_and_explicit_unsupported_routes(tmp_path):
     app = SimjectureWebApplication(scan_roots=(tmp_path,), runs_root=tmp_path / "runs")
     assert app.bootstrap()["default_mode"] == "minimal"
     for backend in ["dsh", "api"]:
-        with pytest.raises(WebApplicationError, match="explicit legacy"):
+        with pytest.raises(WebApplicationError, match="have been removed"):
             app.create_campaign(dict(hypothesis="A finite claim.", backend=backend))
 
 
@@ -295,18 +295,14 @@ def test_verified_identity_recognizes_native_entrypoints(tmp_path, entry):
 
 
 @pytest.mark.parametrize("mode", ["structured", "frontier"])
-def test_native_modes_project_live_backend_and_jobs(tmp_path, mode):
+def test_archived_native_modes_project_backend_and_jobs(tmp_path, mode):
+    from conjecture_solver.campaign_kernel import CampaignKernel
     from conjecture_solver.mvp_monitor import MVPRunMonitor
 
-    request = NativeStudyRequest(
-        hypothesis="A finite test.",
-        campaign_id="study",
-        output_directory=str(tmp_path / "study"),
-        mode=mode,
-        agent_executable=sys.executable,
-    )
-    plan = materialize_operator_input(request)
-    root = Path(plan.output_directory)
+    root = tmp_path / "study"
+    CampaignKernel.open(workspace=root, hypothesis="A finite test.")
+    put(root / "study-mode.json", dict(mode=mode))
+    put(root / "study-launch.json", dict(mode=mode, backend="codex-glm", model="glm-5.3"))
     (root / "supervisor").mkdir(exist_ok=True)
     put(
         root / "supervisor/state.json",

@@ -103,8 +103,7 @@ frozen registry and does not rediscover installations. See
 Mode, agent and numerical execution are separate choices:
 
 - `--backend` and `--model` choose the native agent and its configured model
-- `--mode minimal` is the default; `structured` and `frontier` select other
-  research workflows
+- `--mode minimal` is optional; minimal is the only supported workflow
 - `--execution-backend` chooses how recorded numerical experiments execute
 - `--director` (minimal default) enables bounded strategy reviews and named
   experiment stops; `--no-director` disables it for the new study
@@ -117,9 +116,8 @@ See [minimal-mode evidence and review](research-service.md) for the full contrac
 
 The configured built-in API agent is another advanced option; it uses a private
 `--provider-config` file and supports minimal mode only. See the
-[command reference](../reference/cli.md). Legacy
-[DSH](deepseek-harness.md) and [Simote](simote-agent-roles.md) integrations have
-separate setup guides.
+[command reference](../reference/cli.md). For removed workflows and older
+integrations, see [migration](minimal-migration.md).
 
 ## Inspect, pause and resume
 

@@ -15,7 +15,7 @@ from pathlib import Path
 from .agent_routes import review_route
 from .research_service import ResearchService, put
 
-MODES = ("minimal", "structured", "frontier")
+MODES = ("minimal",)
 
 
 def configure_parser(parser):
@@ -33,7 +33,7 @@ def configure_parser(parser):
         "--workflow",
         dest="mode",
         choices=MODES,
-        help="New studies default to minimal; resumes preserve their mode",
+        help="Minimal is the only supported study workflow",
     )
     parser.add_argument(
         "--execution-backend",
@@ -132,14 +132,19 @@ def selected_mode(root, requested=None, state_dir=None):
     recorded = None
     if (root / "study-mode.json").exists():
         recorded = json.loads((root / "study-mode.json").read_text())["mode"]
+    elif (root / "study-launch.json").exists():
+        launch = json.loads((root / "study-launch.json").read_text())
+        recorded = launch.get("mode", launch.get("request", {}).get("mode"))
     elif (root / "research.json").exists():
         recorded = "minimal"
     elif (state := (state_dir or root / "supervisor") / "state.json").exists():
         recorded = json.loads(state.read_text()).get("workflow", "structured")
     elif (root / "mvp_manifest.json").exists():
         recorded = "structured"
-    if recorded not in (None, *MODES):
-        raise ValueError("Unknown recorded study mode")
+    if recorded not in (None, *MODES) or requested not in (None, *MODES):
+        from .mvp_launch import REMOVED_WORKFLOW_MESSAGE
+
+        raise ValueError(REMOVED_WORKFLOW_MESSAGE)
     if recorded and requested and recorded != requested:
         raise ValueError("Study mode is immutable on resume; choose a new campaign directory")
     return recorded or requested or "minimal"
@@ -196,7 +201,6 @@ def run(args):
 
 
 def _run(args):
-    from .agent_supervisor import AgentSupervisor
     from .research_supervisor import ResearchSupervisor
     from .study_status import read
 
@@ -247,15 +251,6 @@ def _run(args):
             if mode == "minimal"
             else None
         )
-    from .mvp_guidance import MVPGuidedCommissioningPackage
-
-    guided = (
-        MVPGuidedCommissioningPackage.read(args.guided_commission)
-        if getattr(args, "guided_commission", None)
-        else None
-    )
-    if mode != "minimal" and getattr(args, "requirements_file", None):
-        raise ValueError("--requirements-file is supported in minimal mode only")
     saved_execution = previous.get("execution_backend")
     if not saved_execution and (args.campaign / "research.json").exists():
         saved_execution = read(args.campaign / "research.json").get(
@@ -405,83 +400,38 @@ def _run(args):
         hypothesis = hypothesis or prior.manifest["hypothesis"]
         if not python_only:
             args.capabilities = args.capabilities or prior.manifest.get("capabilities")
-    if mode == "minimal":
-        if not (args.campaign / "research.json").exists() and hypothesis is None:
-            raise ValueError("New study requires --hypothesis-file")
-        from .research_finalization import default_report_reserve
-
-        service = (
-            ResearchService.create(
-                args.campaign,
-                hypothesis,
-                wall_seconds=args.wall_seconds,
-                capabilities=args.capabilities,
-                execution_backend=args.execution_backend,
-                completion_policy=getattr(args, "completion_policy", None),
-                execution_pool=pool,
-                report_reserve_seconds=default_report_reserve(args.wall_seconds)
-                if not (args.campaign / "research.json").exists()
-                else None,
-                allow_solver_development=args.allow_solver_development,
-                method_review_scope=existing_research.get("method_review_scope", "study")
-                if existing_research
-                else "used_instruments",
-            )
-            if hypothesis is not None
-            else ResearchService(args.campaign)
+    if not (args.campaign / "research.json").exists() and hypothesis is None:
+        raise ValueError("New study requires --hypothesis-file")
+    from .research_finalization import default_report_reserve
+    service = (
+        ResearchService.create(
+            args.campaign,
+            hypothesis,
+            wall_seconds=args.wall_seconds,
+            capabilities=args.capabilities,
+            execution_backend=args.execution_backend,
+            completion_policy=getattr(args, "completion_policy", None),
+            execution_pool=pool,
+            report_reserve_seconds=default_report_reserve(args.wall_seconds)
+            if not (args.campaign / "research.json").exists()
+            else None,
+            allow_solver_development=args.allow_solver_development,
+            method_review_scope=existing_research.get("method_review_scope", "study")
+            if existing_research
+            else "used_instruments",
         )
-        service.freeze_protocol(args.instructions_file.read_text())
-        if getattr(args, "requirements_file", None):
-            service.freeze_requirements(json.loads(args.requirements_file.read_text()))
-        if getattr(args, "guided_commission", None):
-            service.install_guidance(args.guided_commission)
-        if parent:
-            from .research_continuation import attach
-
-            attach(service, parent, getattr(args, "inherit_file", []))
-        supervisor = ResearchSupervisor(args)
-    else:
-        from .campaign_kernel import CampaignKernel
-        from .mvp_agent import MVPAgentConfig
-        from .mvp_skills import MVPCapabilityRegistry
-
-        if not (args.campaign / "mvp_manifest.json").exists():
-            if hypothesis is None:
-                raise ValueError("New study requires --hypothesis-file")
-            if args.campaign.exists() and any(args.campaign.iterdir()):
-                raise ValueError("New study requires an empty campaign directory")
-            CampaignKernel.open(
-                workspace=args.campaign,
-                hypothesis=hypothesis,
-                guided_commissioning=guided,
-                config=MVPAgentConfig(
-                    execution_backend=args.execution_backend,
-                    max_wall_seconds=args.wall_seconds,
-                    require_independent_contract_review=True,
-                ),
-                capabilities=(
-                    MVPCapabilityRegistry.discover(args.capabilities) if args.capabilities else None
-                ),
-            )
-        elif guided is not None:
-            from .mvp_guidance import MVPGuidedCommissioningPackage
-
-            saved = MVPGuidedCommissioningPackage.read(
-                args.campaign / "guided_commissioning_input" / "package.json"
-            )
-            if saved.package_sha256 != guided.package_sha256:
-                raise ValueError("Guided commissioning is immutable on resume")
-        if (
-            (args.campaign / "mvp_manifest.json").exists()
-            and hypothesis is not None
-            and (
-                CampaignKernel.open_existing(workspace=args.campaign).hypothesis
-                != hypothesis.strip()
-            )
-        ):
-            raise ValueError("Original hypothesis is immutable")
-        args.workflow = mode
-        supervisor = AgentSupervisor(args)
+        if hypothesis is not None
+        else ResearchService(args.campaign)
+    )
+    service.freeze_protocol(args.instructions_file.read_text())
+    if getattr(args, "requirements_file", None):
+        service.freeze_requirements(json.loads(args.requirements_file.read_text()))
+    if getattr(args, "guided_commission", None):
+        service.install_guidance(args.guided_commission)
+    if parent:
+        from .research_continuation import attach
+        attach(service, parent, getattr(args, "inherit_file", []))
+    supervisor = ResearchSupervisor(args)
     put(args.campaign / "study-mode.json", dict(mode=mode, schema_version=1))
     from .mvp_launch import read_process_identity, write_supervisor_record
     from .study_status import TerminalProgress
@@ -499,11 +449,7 @@ def _run(args):
 
         record["request"] = NativeStudyRequest(
             hypothesis=hypothesis
-            or (
-                supervisor.service.manifest["hypothesis"]
-                if mode == "minimal"
-                else CampaignKernel.open_existing(args.campaign).hypothesis
-            ),
+            or supervisor.service.manifest["hypothesis"],
             instruction=args.instructions_file.read_text(),
             campaign_id=("study-" + re.sub(r"[^A-Za-z0-9_.-]", "-", args.campaign.name))[:128],
             output_directory=str(args.campaign),
@@ -522,16 +468,12 @@ def _run(args):
             director_enabled=args.director_enabled,
             allow_solver_development=args.allow_solver_development,
             capability_directory=str(args.capabilities) if args.capabilities else None,
-            method_review_scope=supervisor.service.manifest.get("method_review_scope", "study")
-            if mode == "minimal"
-            else "study",
+            method_review_scope=supervisor.service.manifest.get("method_review_scope", "study"),
             agent_executable=args.executable,
             provider_config=getattr(args, "provider_config", None),
             machine_registry=str(machine_registry) if machine_registry else None,
             machine_ids=machine_ids,
-            completion_policy=supervisor.service.manifest.get("completion_policy", "repair")
-            if mode == "minimal"
-            else "repair",
+            completion_policy=supervisor.service.manifest.get("completion_policy", "repair"),
         ).model_dump(mode="json")
         operator = args.campaign / "operator_input"
         operator.mkdir(exist_ok=True)
@@ -539,11 +481,7 @@ def _run(args):
         # hypothesis for resumes, which compare it with the service manifest.
         (operator / "hypothesis.txt").write_text(
             hypothesis
-            or (
-                supervisor.service.manifest["hypothesis"]
-                if mode == "minimal"
-                else CampaignKernel.open_existing(args.campaign).hypothesis
-            )
+            or supervisor.service.manifest["hypothesis"]
         )
         (operator / "instruction.txt").write_text(args.instructions_file.read_text())
     record.update(

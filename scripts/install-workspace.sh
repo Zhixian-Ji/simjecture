@@ -128,7 +128,7 @@ if [[ "$EUID" == 0 ]] && ! { command -v bwrap >/dev/null 2>&1 && bwrap --unshare
     simjecture_stage="$(mktemp -d "$simjecture_service_home/installer-source.XXXXXX")"
     tar -C "$simjecture_source" --exclude='.git' --exclude='.venv' --exclude='artifacts' \
       --exclude='.private' --exclude='.runtime' --exclude='__pycache__' --exclude='node_modules' \
-      -cf - pyproject.toml uv.lock README.md LICENSE src skills capabilities environments integrations scripts \
+      -cf - pyproject.toml uv.lock README.md LICENSE src skills capabilities environments scripts \
       | tar -xf - -C "$simjecture_stage"
     chown -R "$simjecture_service_user:$simjecture_service_user" "$simjecture_stage"
     simjecture_child_env=("HOME=$simjecture_service_home" "USER=$simjecture_service_user" "LOGNAME=$simjecture_service_user" "PATH=$simjecture_service_home/.local/bin:/usr/local/bin:/usr/bin:/bin" "LANG=C.UTF-8" "SIMJECTURE_SOURCE_DIR=$simjecture_stage" "SIMJECTURE_INSTALL_DIR=$simjecture_install_dir" "SIMJECTURE_PYTHON=$simjecture_python" "SIMJECTURE_SSH_LOGIN=${SIMJECTURE_SSH_LOGIN:-${SUDO_USER:-root}}")
@@ -168,7 +168,7 @@ if [[ ! -f "$simjecture_app/.source-complete" ]]; then
   tar -C "$simjecture_source" --exclude='.git' --exclude='.venv' --exclude='artifacts' \
     --exclude='.private' --exclude='.runtime' --exclude='__pycache__' --exclude='node_modules' \
     -cf "$simjecture_scratch/source-copy.tar" \
-    pyproject.toml uv.lock README.md LICENSE src skills capabilities environments integrations scripts
+    pyproject.toml uv.lock README.md LICENSE src skills capabilities environments scripts
   tar -xf "$simjecture_scratch/source-copy.tar" -C "$simjecture_app"
   touch "$simjecture_app/.source-complete"
 fi

@@ -16,10 +16,10 @@ The package declares:
 Run with:
 
 ```bash
-uv run simjecture mvp \
-  --hypothesis-file hypothesis.txt \
+uv run simjecture study \
+  --hypothesis-file hypothesis.txt --instructions-file instructions.md \
   --guided-commission guided_commission.json \
-  --output artifacts/guided-campaign
+  --campaign artifacts/guided-campaign
 ```
 
 The harness snapshots the input package outside the writable workspace. The
@@ -40,8 +40,7 @@ Validate package structure against
 
 ## Guided native studies and a separate readiness budget
 
-The native `study` launcher accepts the same package in minimal, structured,
-and frontier modes:
+The `study` launcher accepts the same package for minimal research:
 
 ```bash
 uv run simjecture study --mode minimal \

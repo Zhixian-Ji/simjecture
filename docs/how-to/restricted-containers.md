@@ -1,6 +1,6 @@
 # Running inside a restricted container
 
-Scientific modes (`minimal`, `structured`, `frontier`) are independent of the
+The minimal scientific workflow is independent of the
 experiment execution backend. Bubblewrap remains the default. Simjecture never
 silently switches to weaker isolation when namespace creation fails.
 
@@ -111,8 +111,8 @@ explicitly set `SIMJECTURE_DEFAULT_EXECUTION_BACKEND=proot-cooperative`; the UI
 shows that default, and it is stored in the launch contract. An explicit environment
 setting takes precedence over automatic workspace selection and is checked before use. Browser host
 setup can similarly set `SIMJECTURE_DEFAULT_BACKEND`, `SIMJECTURE_DEFAULT_MODEL`,
-and `SIMJECTURE_DEFAULT_CAPABILITIES`. Legacy DSH/API launch forms do not select
-this backend; use native study modes for this route.
+and `SIMJECTURE_DEFAULT_CAPABILITIES`. Minimal studies support this backend; removed legacy routes are described in the
+[migration guide](minimal-migration.md).
 
 ## Provider interruptions
 

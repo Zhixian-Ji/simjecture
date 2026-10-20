@@ -103,32 +103,19 @@ Overview, and send your first message. **Connections** is only needed
 to add an optional compatible API endpoint and key. See the
 [research workspace guide](research-workspace.md) for a complete first investigation.
 
-New studies default to minimal mode. Install and log in with Codex GLM, Codex,
+Minimal is the only supported study workflow. Install and log in with Codex GLM, Codex,
 Grok or AGY independently, then choose that backend and model in the launcher.
 Simjecture does not redistribute those CLIs or subscriptions. Native tools remain
 available; numerical execution defaults to Bubblewrap, with explicit cooperative PRoot
 selection available on supported restricted hosts. No DeepSeek
 API key or DSH install is required for native-agent studies.
 
-## Legacy API credentials
+## Built-in API credentials
 
-Credentials are process-local harness inputs. They are never mounted into the
-agent workspace.
-
-```bash
-export DEEPSEEK_API_KEY='your-process-local-key'
-```
-
-The official DeepSeek route is selected automatically when this variable is
-present. `ACS_MODEL_PROVIDER=deepseek` makes that choice explicit. See
-`.env.example` for non-secret configuration names; do not place a real key in
-that tracked example.
-
-Official DeepSeek campaigns retain thinking mode by default. For a
-latency-oriented demonstration, `ACS_DEEPSEEK_THINKING=disabled` selects the
-provider's non-thinking mode without changing campaign turn limits, evidence
-contracts, or audit gates. This is an explicit quality/latency tradeoff rather
-than the scientific default.
+Install the `workspace` extra and configure a compatible API through the workspace's
+**Connections** page, or supply a private provider file to `study --backend builtin`.
+Keep credentials out of research files and version control. Native CLI agents use
+their own existing login. See [the workspace guide](research-workspace.md).
 
 ## Optional simulation runtimes
 
@@ -217,8 +204,8 @@ uv run simjecture web demos/gray_scott_counterexample/record --read-only
 
 The default browser entry point is the research workspace. Use a compatible API or
 an installed native CLI. The experiment monitor remains available at `/monitor` and
-can inspect existing study records. The legacy DSH engine is an explicit alternative;
-it is not required for ordinary workspace setup. See [Web interface](web-interface.md).
+can inspect existing study records. DSH has been removed; see
+[migration](../how-to/minimal-migration.md) and [Web interface](web-interface.md).
 
 ## Optional terminal dashboard (maintenance mode)
 
