@@ -1772,7 +1772,12 @@ async function boot() {
   await followRoute({ reveal: false });
 }
 for (const item of document.querySelectorAll("[data-view]"))
-  item.onclick = () => {if(item.dataset.view === "home")globalThis.WorkspaceProjects?.setSelected(null); view(item.dataset.view);};
+  item.onclick = () => {
+    if (item.dataset.view === "home") globalThis.WorkspaceProjects?.setSelected(null);
+    // User navigation supersedes an unfinished route, including its pending fetches.
+    location.hash = item.dataset.view;
+    view(item.dataset.view);
+  };
 $("connection-button").onclick = () => view("settings");
 $("rail-toggle").onclick = () => $("left-sidebar-toggle").click();
 $("rail-new-project").onclick = () => $("new-project").click();
