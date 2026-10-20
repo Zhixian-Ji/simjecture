@@ -28,6 +28,40 @@ from ..research_service import put
 TERMINAL = {"succeeded", "failed", "cancelled", "timed_out", "interrupted"}
 
 
+def selected_inputs(project, selection):
+    """Select regular project files without following links or copying unrelated results."""
+    files = project / "files"
+    if selection is not None and (
+        not isinstance(selection, list) or not all(isinstance(p, str) for p in selection)
+    ):
+        raise ValueError("input_files must be a list of project-relative file paths")
+    paths = sorted(files.rglob("*")) if selection is None else [files / p for p in selection]
+    selected, seen = [], set()
+    for path in paths:
+        relative = path.relative_to(files)
+        invalid = (
+            relative.is_absolute()
+            or ".." in relative.parts
+            or any(part.startswith(".") for part in relative.parts)
+            or any(
+                (files / Path(*relative.parts[:i])).is_symlink()
+                for i in range(1, len(relative.parts) + 1)
+            )
+            or not path.is_file()
+            or not path.resolve().is_relative_to(files.resolve())
+        )
+        if invalid:
+            if selection is not None:
+                raise ValueError("Simulation inputs must be regular, unlinked project files")
+            continue
+        name = relative.as_posix()
+        if name in seen:
+            continue
+        seen.add(name)
+        selected.append((path, relative))
+    return selected
+
+
 def read(path):
     try:
         return json.loads(path.read_text())
@@ -71,6 +105,9 @@ def launch(project, payload):
     kind = payload.get("kind", "simulation")
     if kind not in {"simulation", "command"}:
         raise ValueError("Unknown execution kind")
+    if kind == "command" and payload.get("input_files") is not None:
+        raise ValueError("input_files applies to simulations, not shared commands")
+    selected = selected_inputs(project, payload.get("input_files")) if kind == "simulation" else []
     directory = project / "simulations"
     directory.mkdir(exist_ok=True)
     slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")[:64] or "simulation"
@@ -88,19 +125,7 @@ def launch(project, payload):
         inputs = []
         input_manifest = {}
         if kind == "simulation":
-            total = 0
-            for path in (project / "files").rglob("*"):
-                relative = path.relative_to(project / "files")
-                if (
-                    path.is_symlink()
-                    or any(part.startswith(".") for part in relative.parts)
-                    or not path.is_file()
-                    or not path.resolve().is_relative_to(project / "files")
-                ):
-                    continue
-                total += path.stat().st_size
-                if total > 512 * 1024**2:
-                    raise ValueError("Simulation inputs exceed 512 MB; use explicit external paths")
+            for path, relative in selected:
                 target = work / relative
                 target.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(path, target)
@@ -184,12 +209,13 @@ def file_role(path, name, request):
 
 
 def workspace_files(work, request):
+    resolved_work = work.resolve()
     for path in work.rglob("*"):
         relative = path.relative_to(work)
         if path.is_symlink() or any(p.startswith(".") for p in relative.parts):
             continue
         try:
-            if path.is_file() and path.resolve().is_relative_to(work):
+            if path.is_file() and path.resolve().is_relative_to(resolved_work):
                 name = relative.as_posix()
                 yield dict(
                     name=name, bytes=path.stat().st_size, role=file_role(path, name, request)
@@ -199,7 +225,7 @@ def workspace_files(work, request):
             continue
 
 
-def snapshot(project, identifier, *, include_files=False):
+def snapshot(project, identifier, *, include_files=False, summary=False):
     root = resolve(Path(project), identifier)
     request, state = read(root / "request.json"), read(root / "state.json")
     live = is_live(read(root / "process.json"))
@@ -210,18 +236,38 @@ def snapshot(project, identifier, *, include_files=False):
         {k: v for k, v in request.items() if k != "input_manifest"}
         | state
         | dict(
+            kind=read(root / "classification.json").get("kind", request.get("kind", "simulation")),
             status=status,
             live=live,
             path=str(root),
             elapsed_seconds=max(0, state.get("finished_at", time.time()) - request["created_at"]),
-            output=tail(root / "output.log"),
-            controller_output=tail(root / "controller.log", 2000),
-            console_logs=[
-                dict(name=f"__console__/{p.name}", bytes=p.stat().st_size, role="console")
-                for p in sorted(root.glob("output.*"))
-                if p.is_file() and not p.is_symlink()
-            ],
         )
+    )
+    if summary:
+        # Poll complete history without reading consoles or returning input lists.
+        return {
+            key: result[key]
+            for key in (
+                "id",
+                "name",
+                "kind",
+                "status",
+                "live",
+                "created_at",
+                "source_turn",
+                "scientific_status",
+                "elapsed_seconds",
+            )
+            if key in result
+        }
+    result.update(
+        output=tail(root / "output.log"),
+        controller_output=tail(root / "controller.log", 2000),
+        console_logs=[
+            dict(name=f"__console__/{p.name}", bytes=p.stat().st_size, role="console")
+            for p in sorted(root.glob("output.*"))
+            if p.is_file() and not p.is_symlink()
+        ],
     )
     if include_files:
         work = Path(request["work_directory"])
@@ -242,11 +288,30 @@ def snapshot(project, identifier, *, include_files=False):
     return result
 
 
-def list_jobs(project):
+def ordered_jobs(records):
+    """Return complete history in chronological order, including native commands."""
+
+    def started(job):
+        turn = str(job.get("source_turn", ""))
+        return job.get("created_at") or (int(turn) / 1e9 if turn.isdigit() else 0)
+
+    return sorted(records, key=started)
+
+
+def list_jobs(project, *, summary=False):
     directory = Path(project) / "simulations"
-    return [snapshot(project, p.parent.name) for p in sorted(directory.glob("*/request.json"))][
-        -100:
-    ]
+    return ordered_jobs(
+        snapshot(project, p.parent.name, summary=summary) for p in directory.glob("*/request.json")
+    )
+
+
+def classify(project, identifier, kind):
+    if kind not in {"simulation", "command"}:
+        raise ValueError("Choose simulation or command")
+    root = resolve(Path(project), identifier)
+    # Keep execution requests, workspace locations, and file provenance immutable.
+    put(root / "classification.json", dict(kind=kind, updated_at=time.time()))
+    return snapshot(project, identifier)
 
 
 def cancel(project, identifier):

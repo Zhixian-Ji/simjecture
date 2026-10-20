@@ -13,6 +13,7 @@ window.WorkspaceMonitor = {
       announced = new Set(),
       inFlight = {},
       detailRevision = {},
+      visibleCounts = { simulations: 50, commands: 50 },
       listRevision = "";
     const panelFor = (job) =>
       job.kind === "command" ? "commands" : "simulations";
@@ -38,6 +39,7 @@ window.WorkspaceMonitor = {
         selected = { simulations: null, commands: null };
         announced = new Set(jobs.map((j) => j.id));
         detailRevision = {};
+        visibleCounts = { simulations: 50, commands: 50 };
         for (const panel of ["simulations", "commands"]) {
           const container = $(`${prefixFor(panel)}-detail`);
           container.replaceChildren(
@@ -76,6 +78,7 @@ window.WorkspaceMonitor = {
       const nextList = JSON.stringify([
         p.id,
         selected,
+        visibleCounts,
         jobs.map((j) => [j.id, j.name, j.status, j.kind]),
       ]);
       if (nextList !== listRevision) {
@@ -86,8 +89,11 @@ window.WorkspaceMonitor = {
         $("sidebar-run-list").replaceChildren();
         $("simulation-list").replaceChildren();
         $("command-list").replaceChildren();
+        const shown = { simulations: 0, commands: 0 };
         for (const job of [...jobs].reverse()) {
           const panel = panelFor(job);
+          const inPage = shown[panel]++ < visibleCounts[panel];
+          if (!inPage && job.id !== selected[panel]) continue;
           const a = node(
             "a",
             undefined,
@@ -111,6 +117,21 @@ window.WorkspaceMonitor = {
             b.onclick = () => window.WorkspacePanels?.set("right", false);
             $("sidebar-run-list").append(b);
           }
+        }
+        for (const panel of ["simulations", "commands"]) {
+          const remaining = shown[panel] - visibleCounts[panel];
+          if (remaining <= 0) continue;
+          const more = node(
+            "button",
+            `Show ${Math.min(50, remaining)} more ${panel}`,
+            "quiet load-more-runs",
+          );
+          more.type = "button";
+          more.onclick = () => {
+            visibleCounts[panel] += 50;
+            render(project());
+          };
+          $(`${prefixFor(panel)}-list`).append(more);
         }
         inspector.scrollTop = inspectorScroll;
         $("sidebar-run-list").scrollTop = sidebarScroll;
@@ -169,7 +190,7 @@ window.WorkspaceMonitor = {
         node(
           "p",
           shared
-            ? "Commands use the shared project folder. These files are not specific to this command."
+            ? "This job used the shared project folder. These files are not specific to this run."
             : command
               ? "Files retained from this command’s isolated workspace."
               : "Files created or changed in this simulation’s workspace.",
@@ -235,6 +256,7 @@ window.WorkspaceMonitor = {
           projectId,
           identifier,
           job.status,
+          job.kind,
           job.output,
           job.files,
           job.file_provenance,
@@ -286,6 +308,34 @@ window.WorkspaceMonitor = {
             }
           };
           title.append(stop);
+          const classify = node(
+            "button",
+            panel === "commands" ? "Move to Simulations" : "Move to Commands",
+            "quiet classify-run",
+          );
+          classify.onclick = async () => {
+            classify.disabled = true;
+            try {
+              const kind = job.kind === "command" ? "simulation" : "command";
+              const updated = await api("classify-simulation", {
+                project: projectId, simulation: identifier, kind,
+              });
+              if (project()?.id === projectId) {
+                const current = project();
+                current.simulations = current.simulations.map((j) => j.id === identifier ? updated : j);
+                selected[panel] = null;
+                render(current);
+                location.hash = link(projectId, {view: "interactive", [kind]: identifier});
+                await open(identifier);
+              }
+              notify(kind === "simulation" ? "Moved to Simulations" : "Moved to Commands");
+            } catch (e) {
+              notify(e.message, true);
+            } finally {
+              classify.disabled = readonly();
+            }
+          };
+          title.append(classify);
           const output = node("pre", "", "live-console");
           output.setAttribute(
             "aria-label",
@@ -316,6 +366,9 @@ window.WorkspaceMonitor = {
         const stop = container.querySelector(".stop-run");
         stop.hidden = !job.live || job.native;
         stop.disabled = readonly();
+        const classify = container.querySelector(".classify-run");
+        classify.hidden = job.native || readonly();
+        classify.disabled = readonly();
         const output = container.querySelector(".live-console");
         const pinned =
           !output.textContent ||

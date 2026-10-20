@@ -3,6 +3,8 @@
 import json
 import time
 
+import pytest
+
 from conjecture_solver.web import jobs
 from conjecture_solver.web.activity import native_activity
 from conjecture_solver.web.inventory import discover_system_warpx
@@ -121,6 +123,140 @@ def test_command_files_are_shared_project_files(tmp_path):
         "previous-result.txt": "shared",
         "comparison.txt": "shared",
     }
+
+
+def test_selected_simulation_inputs_skip_large_unrelated_project_files(tmp_path):
+    files = tmp_path / "files"
+    (files / "case").mkdir(parents=True)
+    (files / "case/input.txt").write_text("needed")
+    # A sparse archive exceeds the former 512 MiB ceiling without a large test write.
+    with (files / "old-result.bin").open("wb") as stream:
+        stream.truncate(1024**3)
+    assert {relative.as_posix() for _, relative in jobs.selected_inputs(tmp_path, None)} == {
+        "case/input.txt",
+        "old-result.bin",
+    }
+    assert len(jobs.selected_inputs(tmp_path, ["old-result.bin"])) == 1
+    run = jobs.launch(
+        tmp_path,
+        dict(
+            command="cat case/input.txt > result.txt",
+            input_files=["case/input.txt", "case/input.txt"],
+        ),
+    )
+    result = await_finished(tmp_path, run["id"])
+    assert result["kind"] == "simulation" and result["status"] == "succeeded"
+    assert result["inputs"] == ["case/input.txt"]
+    assert {f["name"]: f["role"] for f in result["files"]} == {
+        "case/input.txt": "input",
+        "result.txt": "output",
+    }
+    empty = jobs.launch(tmp_path, dict(command="printf fresh > fresh.txt", input_files=[]))
+    assert {f["name"] for f in await_finished(tmp_path, empty["id"])["files"]} == {"fresh.txt"}
+
+
+@pytest.mark.parametrize(
+    "selection",
+    [["../outside.txt"], ["/etc/passwd"], ["linked/file.txt"], ["missing.txt"], "input.txt", [123]],
+)
+def test_selected_inputs_reject_non_project_or_linked_files(tmp_path, selection):
+    (tmp_path / "files").mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "file.txt").write_text("not a project input")
+    (tmp_path / "files/linked").symlink_to(outside, target_is_directory=True)
+    with pytest.raises(ValueError):
+        jobs.launch(tmp_path, dict(command="true", input_files=selection))
+    assert not (tmp_path / "simulations").exists()
+
+
+@pytest.mark.parametrize("aliased", [False, True])
+def test_reclassifying_legacy_command_preserves_request_and_shared_provenance(tmp_path, aliased):
+    (tmp_path / "files").mkdir()
+    run = jobs.launch(
+        tmp_path, dict(name="Solver", command="echo result > field.txt", kind="command")
+    )
+    await_finished(tmp_path, run["id"])
+    request = tmp_path / "simulations" / run["id"] / "request.json"
+    work = tmp_path / "files"
+    if aliased:
+        # Migrated requests can retain an old host path through a compatibility link.
+        alias = tmp_path / "old-host"
+        alias.symlink_to(tmp_path, target_is_directory=True)
+        work = alias / "files"
+        saved = json.loads(request.read_text())
+        saved["work_directory"] = str(work)
+        request.write_text(json.dumps(saved))
+    original = request.read_bytes()
+    jobs.classify(tmp_path, run["id"], "simulation")
+    result = jobs.snapshot(tmp_path, run["id"], include_files=True)
+    assert result["kind"] == "simulation"
+    assert result["file_provenance"] == "shared"
+    assert result["files"] == [dict(name="field.txt", bytes=7, role="shared")]
+    assert result["work_directory"] == str(work)
+    assert request.read_bytes() == original
+    assert jobs.classify(tmp_path, run["id"], "command")["kind"] == "command"
+    with pytest.raises(ValueError, match="Choose simulation or command"):
+        jobs.classify(tmp_path, run["id"], "evidence")
+
+
+def test_simulation_history_survives_many_newer_commands(tmp_path):
+    from conjecture_solver.web.workspace import Workspace
+
+    workspace = Workspace(tmp_path / ".workspace")
+    project = workspace.create({"name": "Simulation history"})
+    root_project = workspace.directory(project["id"])
+    directory = root_project / "simulations"
+    for i in range(240):
+        root = directory / f"{i:03d}-job"
+        root.mkdir(parents=True)
+        jobs.put(
+            root / "request.json",
+            dict(
+                id=root.name,
+                name=root.name,
+                kind="simulation" if i < 120 else "command",
+                created_at=i,
+            ),
+        )
+        jobs.put(root / "state.json", dict(status="succeeded", finished_at=i))
+    records = jobs.list_jobs(root_project)
+    assert len(records) == 240
+    assert records[0]["id"] == "000-job"
+    assert records[1]["id"] == "001-job"
+    assert len(workspace.project(project["id"])["simulations"]) == 240
+    native = dict(id="native-active", kind="command", source_turn="1000000000000", live=True)
+    combined = jobs.ordered_jobs(records + [native])
+    assert len(combined) == 241 and combined[-1] == native
+    assert combined[0]["kind"] == "simulation"
+
+
+def test_history_summaries_do_not_read_console_logs(tmp_path, monkeypatch):
+    run = tmp_path / "simulations/001-solver"
+    run.mkdir(parents=True)
+    jobs.put(
+        run / "request.json",
+        dict(
+            id=run.name,
+            name="Solver",
+            kind="simulation",
+            created_at=1,
+            inputs=["input.par"],
+            input_manifest={"input.par": {}},
+        ),
+    )
+    jobs.put(run / "state.json", dict(status="succeeded", finished_at=2))
+    (run / "output.log").write_text("Retained detailed output")
+    calls = []
+    original = jobs.tail
+    monkeypatch.setattr(
+        jobs, "tail", lambda path, *args: calls.append(path) or original(path, *args)
+    )
+    summaries = jobs.list_jobs(tmp_path, summary=True)
+    assert summaries[0]["id"] == "001-solver"
+    assert "output" not in summaries[0] and "inputs" not in summaries[0]
+    assert calls == []
+    assert jobs.snapshot(tmp_path, "001-solver")["output"] == "Retained detailed output"
 
 
 def test_native_activity_exposes_state_not_reasoning(tmp_path):
