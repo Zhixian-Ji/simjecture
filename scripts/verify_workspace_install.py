@@ -15,6 +15,7 @@ import time
 import urllib.request
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import urlencode
 
 
 def verify(release, destination):
@@ -86,7 +87,7 @@ def verify(release, destination):
         [
             str(python),
             "-c",
-            "import h5py, smolagents; "
+            "import h5py, mcp, pypdf, smolagents; "
             "from conjecture_solver.agent_skills import research_skills; "
             "assert 'flash-mhd' in research_skills()",
         ],
@@ -121,6 +122,7 @@ def verify(release, destination):
                     time.sleep(0.2)
             assert bootstrap["projects"] == []
             assert not bootstrap["settings"]["api_configured"]
+            assert bootstrap["knowledge_available"]
             for resource in (
                 "/",
                 "/assets/workspace-theme.js",
@@ -130,11 +132,58 @@ def verify(release, destination):
                 "/favicon.svg",
                 "/favicon.ico",
                 "/assets/workspace-monitor.js",
+                "/assets/workspace-knowledge.js",
+                "/assets/workspace-knowledge.css",
                 "/assets/vendor/webawesome-3.14.0/components/tab/tab.js",
                 "/api/workspace/tools",
             ):
                 with urllib.request.urlopen(url + resource, timeout=10) as response:
                     assert response.status == 200 and response.read()
+
+            def post(endpoint, payload):
+                request = urllib.request.Request(
+                    url + "/api/workspace/" + endpoint,
+                    data=json.dumps(payload).encode(),
+                    headers={
+                        "Content-Type": "application/json",
+                        "X-Simjecture-Token": bootstrap["control_token"],
+                    },
+                )
+                with urllib.request.urlopen(request, timeout=10) as response:
+                    return json.load(response)
+
+            references = home / "research-notes"
+            references.mkdir()
+            (references / "reference.md").write_text(
+                "# Fresh install reference\nA magnetic diffusion installation sentinel.\n"
+            )
+            post("knowledge-source", {"path": str(references), "name": "Research notes"})
+            conversation = post("projects", {"name": "Fresh conversation"})
+            query = urlencode({"q": "sentinel", "conversation": conversation["id"]})
+            deadline = time.monotonic() + 15
+            while True:
+                with urllib.request.urlopen(
+                    url + "/api/workspace/knowledge-search?" + query, timeout=10
+                ) as response:
+                    matches = json.load(response)["results"]
+                if matches:
+                    break
+                if time.monotonic() >= deadline:
+                    raise RuntimeError("Installed knowledge library did not index the source")
+                time.sleep(0.1)
+            query = urlencode(
+                {
+                    "id": matches[0]["id"],
+                    "revision": matches[0]["revision"],
+                    "conversation": conversation["id"],
+                }
+            )
+            with urllib.request.urlopen(
+                url + "/api/workspace/knowledge-read?" + query, timeout=10
+            ) as response:
+                passage = json.load(response)
+            assert "magnetic diffusion installation sentinel" in passage["text"]
+            assert passage["evidence_status"] == "context_only"
         finally:
             child.send_signal(signal.SIGINT)
             child.wait(timeout=15)
@@ -147,6 +196,7 @@ def verify(release, destination):
         gui=True,
         skill_resources=True,
         hdf5_reader=True,
+        knowledge_library=True,
     )
     (destination / "result.json").write_text(json.dumps(result, indent=2) + "\n")
     print(json.dumps(result), flush=True)

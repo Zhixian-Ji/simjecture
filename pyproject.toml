@@ -67,6 +67,8 @@ flash-demo = [
   "h5py>=3.10,<4",
 ]
 workspace = [
+    "mcp>=2,<3",
+    "pypdf>=6,<7",
     "psutil>=6,<8",
     "smolagents[openai]>=1.24,<2",
     "h5py>=3.10,<4",
@@ -77,6 +79,10 @@ public = [
     "smolagents[openai]>=1.24,<2",
     "psutil>=6,<8",
     "h5py>=3.10,<4",
+]
+knowledge = [
+    "mcp>=2,<3",
+    "pypdf>=6,<7",
 ]
 
 [dependency-groups]

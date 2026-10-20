@@ -121,6 +121,11 @@ The installer verifies the release bundle and prepares Python and the browser
 workspace. Reopen it with `~/simjecture/start-workspace`. Research files live under
 `~/simjecture/artifacts/projects`. See [installation options](https://drawingsword.com/simjecture/getting-started/installation.html).
 
+In the local workspace, open **Knowledge → Connect folder** to make research files
+searchable across new conversations. The library also indexes completed workspace
+discussions and study reports, with versioned source citations. Indexing needs no
+embedding service. See [the knowledge library guide](docs/getting-started/research-workspace.md#local-knowledge-library).
+
 1. Choose a compatible API model or an authenticated native agent in the workspace.
 2. Discuss your question and prepare a study brief with **Autonomous research**.
 3. Review its hypothesis, evidence requirements, completion policy and budget.

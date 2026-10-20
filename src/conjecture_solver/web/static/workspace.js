@@ -132,7 +132,7 @@ function md(node, text) {
   window.WorkspaceRich.render(node, String(text || ""), state.project);
 }
 function view(name) {
-  if(hosted && ["settings","machines"].includes(name)) name="home";
+  if(hosted && ["settings","machines","knowledge"].includes(name)) name="home";
   if (name !== "project") ++state.projectRequest;
   const changed = state.view !== name;
   state.view = name;
@@ -153,6 +153,7 @@ function view(name) {
   if (name === "tools") refreshTools().catch((e) => toast(e.message, true));
   if (name === "benchmarks") refreshBenchmarks().catch((e) => toast(e.message, true));
   if (name === "machines") refreshMachines().catch((e) => toast(e.message, true));
+  if (name === "knowledge") globalThis.WorkspaceKnowledge?.show().catch((e) => toast(e.message, true));
   if (name === "home" && state.token && changed)
     renderAgent(undefined, "home").catch((e) => toast(e.message, true));
 }
@@ -194,7 +195,10 @@ async function followRoute({ reveal = true } = {}) {
   try {
     const params = new URLSearchParams(location.hash.slice(1)),
       id = params.get("project");
-    if (id) {
+    if (params.get("knowledge") && !hosted) {
+      view("knowledge");
+      await globalThis.WorkspaceKnowledge?.openRoute(params);
+    } else if (id) {
       if (state.project?.id !== id) {
         if (!(await openProject(id))) return;
       } else view("project");
@@ -228,7 +232,7 @@ async function followRoute({ reveal = true } = {}) {
       }
     } else
       view(
-        ["settings", "tools", "benchmarks", "machines"].includes(location.hash.slice(1))
+        ["settings", "tools", "benchmarks", "machines", "knowledge"].includes(location.hash.slice(1))
           ? location.hash.slice(1)
           : "home",
       );
@@ -471,6 +475,7 @@ async function openProject(id) {
   state.studyRevision = "";
   state.launchKey = null;
   renderProject(true);
+  globalThis.WorkspaceKnowledge?.renderComposer();
   view("project");
   renderProjects();
   await renderAgent();
@@ -653,6 +658,7 @@ function renderProject(force = false) {
       const content = el("div", undefined, "message-content");
       md(content, message.content);
       article.append(content);
+      globalThis.WorkspaceKnowledge?.renderCitations(article, message.knowledge_citations);
       const tools = (message.events || []).filter(
         (e) => e.type === "tool" || e.type === "observation",
       );
@@ -837,9 +843,13 @@ async function send() {
   const message = draft.trim();
   const project = state.project?.id;
   if (!message || !project) return;
+  const references = [...(globalThis.WorkspaceKnowledge?.references(project) || [])];
   // Navigation and new typing may happen while either request is pending.
   await saveConversationAgent();
-  await api("message", { project, message });
+  const payload = { project, message };
+  if (references.length) payload.knowledge_refs = references;
+  await api("message", payload);
+  if (references.length) globalThis.WorkspaceKnowledge?.clear(project, references);
   if (state.project?.id === project && input.value === draft) {
     input.value = "";
     globalThis.WorkspaceComposer?.update("chat-input");
@@ -1746,6 +1756,7 @@ async function boot() {
   state.projects = data.projects;
   state.readonly = !data.allow_mutations;
   globalThis.WorkspaceProjects?.init(data);
+  globalThis.WorkspaceKnowledge?.init(data);
   $("readonly").hidden = !state.readonly;
   renderSettings();
   renderProjects();
@@ -1835,6 +1846,7 @@ $("check-machine").onclick = () =>
   });
 $("new-project").onclick = () => {
   state.project = null;
+  globalThis.WorkspaceKnowledge?.newConversation();
   renderProjects();
   view("home");
   const collection = globalThis.WorkspaceProjects?.selected();
@@ -1858,11 +1870,13 @@ $("quick-start").onsubmit = (e) => {
       name: message.split("\n")[0].slice(0, 80),
       agent,
       collection: globalThis.WorkspaceProjects?.selected(),
+      knowledge_sources: globalThis.WorkspaceKnowledge?.selection(),
     });
     await reloadProjects();
     if (request !== state.projectRequest) return;
     mode("interactive");
     if (!(await openProject(p.id))) return;
+    globalThis.WorkspaceKnowledge?.transferHome(p.id);
     $("chat-input").value = message;
     if ($("first-request").value === draft) $("first-request").value = "";
     globalThis.WorkspaceComposer?.update("first-request");
@@ -2083,12 +2097,14 @@ setInterval(async () => {
         state.project = project;
         renderProject();
         globalThis.WorkspaceProjects?.render();
+        globalThis.WorkspaceKnowledge?.renderComposer();
         if (state.mode === "autonomous") await renderStudies();
       }
     }
     if (state.view === "tools" && ++ticks % 3 === 0) await refreshTools();
     if (state.view === "machines") await refreshMachines();
     if (state.view === "benchmarks") await refreshBenchmarks();
+    if (state.view === "knowledge") await globalThis.WorkspaceKnowledge?.refresh();
   } catch (error) {
     toast(
       `Connection interrupted: ${error.message}. Your work stays on disk.`,

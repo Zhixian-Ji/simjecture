@@ -190,6 +190,95 @@ inputs; the research service's existing separate experiment storage limits still
 Tool installations are shared on the machine; a project's inputs and study outputs
 belong to that project.
 
+## Local knowledge library
+
+Open **Knowledge** in the sidebar to search connected research folders, completed
+workspace conversations and study reports. Use **Connect folder** with an absolute
+path on the machine running Simjecture, such as `/home/you/research`. An optional
+name and exclusion patterns help keep generated files out of the library.
+
+![Search results and a versioned passage preview in the local knowledge library](../_static/knowledge/library-desktop.png)
+
+The same controls work in a [narrow browser layout](../_static/knowledge/library-mobile.png).
+These screenshots use sample research notes.
+
+The first version uses local full-text ranking over titles, paths and passages,
+including Chinese search terms. It needs no embedding model or inference API.
+It reads text and code, notebooks without their outputs, PDF text by page, PPTX
+text and speaker notes by slide, and DOCX paragraphs. Install the `workspace`
+extra for the complete interface, or `knowledge` for standalone extraction and MCP:
+
+```bash
+uv sync --extra workspace
+# Standalone knowledge tools:
+uv sync --extra knowledge
+```
+
+**Search** supports content-type and source filters. Select a result to preview
+its source section and version, move between sections, download the unchanged
+original, or copy a citation. **Discuss this** prepares a new conversation with
+the selected passage attached. **Use in conversation** attaches it to the
+conversation you most recently opened. Neither action sends a message or spends
+provider credit. Edit the draft and send when ready.
+
+The **Knowledge sources** control beside each composer defaults to all enabled
+sources in that workspace. Select a subset or select none. The server applies
+this selection to the built-in agent's `knowledge_search` and `knowledge_read`
+tools and to CLI calls scoped with `--conversation`. Native CLI agents receive
+instructions for the same command-line tools. This controls knowledge retrieval;
+trusted local agents may still have independent operating-system file access.
+
+**Sources** displays counts, last-check times, progress and extraction errors.
+The local web server reconciles enabled sources every minute and after restart.
+**Refresh now** queues an immediate check. Changes are processed incrementally;
+deleted files leave current search and uniquely identifiable renamed files keep
+their identity. An unavailable directory retains its last indexed content with
+an unavailable status. Shared folder registrations and their index are reused
+when the same path and exclusion patterns are connected to another workspace;
+different exclusions use separate indexes, while connections and enabled state
+are workspace-specific. Disconnecting a folder removes that workspace's
+access without deleting original files.
+
+Sources are reference context, not accepted scientific evidence. Each read
+exposes a revision and an exact section citation. Agent reads during interactive
+turns and manually attached passages are preserved under the turn's
+`knowledge-context/`. The most recent 32 distinct preparation passages from
+currently allowed sources are copied to an autonomous study's
+`research/project_context/knowledge/references.json`. Editing a connected file
+does not rewrite these records. Deleting a conversation removes its derived
+conversation and study-search records as well.
+
+The index lives in `artifacts/.knowledge/index.sqlite`; it is local user data.
+Extracted versions are retained for existing citations. Conversation ingestion
+uses completed public result events, not provider reasoning or private transport
+history. Hosted public trials do not expose this local-folder interface.
+
+Current limits: 20,000 eligible files per folder; 2 MiB per text/code file and
+64 MiB per PDF/Office file; 500,000 extracted characters and 400 pages/slides per
+document. Truncation and extraction failures appear under Sources. Hidden
+directories, dependency/build folders, symbolic links and common credential
+filenames are skipped. Raw arrays, binary checkpoints and images are not indexed.
+Scanned PDFs need an existing text layer; diagram understanding, OCR and semantic
+embedding search are not included in this first version.
+
+Use **Agent access** to copy a workspace-specific MCP configuration or CLI
+command. MCP exposes read-only `knowledge_search`, `knowledge_read`, and
+`knowledge_status` tools over stdio; it does not start a campaign or grant source
+registration access. Run it on the same machine as the sources:
+
+```bash
+simjecture knowledge --runs-root artifacts --workspace personal status
+simjecture knowledge --runs-root artifacts add /home/you/research
+simjecture knowledge --runs-root artifacts sync
+simjecture knowledge --runs-root artifacts search "magnetic diffusion"
+simjecture knowledge --runs-root artifacts read DOCUMENT_ID --revision REVISION --chunk 0
+simjecture knowledge --runs-root artifacts --workspace personal mcp
+```
+
+CLI and MCP reads work with the browser closed. Run `sync` to refresh while the
+web server is stopped. Local indexing does not upload sources; when a configured
+hosted agent reads a passage, that passage becomes part of its provider context.
+
 ## Research tools
 
 The catalogue has a search bar, category filter, and **All tools**, **Installed**,
