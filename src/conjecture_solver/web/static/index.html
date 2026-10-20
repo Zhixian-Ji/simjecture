@@ -35,7 +35,7 @@
           <button class="button danger quiet" id="cancel-button" type="button" disabled>Stop</button>
           <a class="button quiet" id="continue-study-link" hidden>Continue investigation</a>
           <a class="button quiet" id="steer-study-link" hidden>Send guidance</a>
-          <button class="button primary" id="new-run-button" type="button">New hypothesis</button>
+          <button class="button primary" id="new-run-button" type="button" disabled>New hypothesis</button>
         </div>
       </header>
 
@@ -48,7 +48,7 @@
             Simjecture tests hypotheses, searches for counterexamples, and preserves
             every scientific branch as durable evidence.
           </p>
-          <button class="button primary large" id="empty-new-run" type="button">Start a campaign</button>
+          <button class="button primary large" id="empty-new-run" type="button" disabled>Start a campaign</button>
         </section>
 
         <nav id="study-navigation" class="study-navigation" aria-label="Research navigation" hidden></nav>
@@ -204,19 +204,11 @@
           </div>
           <button class="icon-button" id="close-dialog" type="button" aria-label="Close">×</button>
         </header>
-        <div class="form-row">
-          <label><span>Mode</span><select name="mode" id="launch-mode">
-            <option value="minimal" selected>Minimal — agent-owned research</option>
-            <option value="structured">Structured — guided stages</option>
-            <option value="frontier">Frontier — agent-owned, full ledger</option>
-            <option value="legacy">Legacy — DSH / API</option>
-          </select></label>
-          <label><span>Backend</span><select name="backend" id="launch-backend">
-            <option value="codex-glm">Codex GLM</option><option value="codex">Codex</option>
-            <option value="grok">Grok</option><option value="agy">AGY</option>
-            <option value="dsh">DSH (legacy mode)</option><option value="api">API (legacy mode)</option>
-          </select></label>
-        </div>
+        <input type="hidden" name="mode" id="launch-mode" value="minimal">
+        <label><span>Backend</span><select name="backend" id="launch-backend">
+          <option value="codex-glm">Codex GLM</option><option value="codex">Codex</option>
+          <option value="grok">Grok</option><option value="agy">AGY</option>
+        </select></label>
         <label><span>Model <em>Uses your existing backend login</em></span>
           <input name="model" id="launch-model" placeholder="glm-5.3 (Codex GLM default)">
         </label>
@@ -262,22 +254,14 @@
         </label>
         <label><span>Numerical instrument registry <em>Optional</em></span>
           <input name="capability_directory" placeholder="Directory containing installed capability manifests">
-          <small>Minimal uses the Python sandbox when this is blank. Supply a registry to expose installed solvers.</small>
+          <small>Leave blank to use available tools, enter a registry to restrict access, or none for Python only.</small>
         </label>
         <details>
           <summary>Execution limits</summary>
           <div class="form-row advanced-fields">
             <label>
-              <span>Command timeout (seconds)</span>
+              <span>Agent watchdog (seconds)</span>
               <input name="max_command_seconds" type="number" min="1" max="86400" value="600">
-            </label>
-            <label>
-              <span>Workspace (MB)</span>
-              <input name="max_workspace_mb" type="number" min="1" max="1048576" value="512">
-            </label>
-            <label>
-              <span>Memory (MB)</span>
-              <input name="max_memory_mb" type="number" min="1" max="1048576" value="4096">
             </label>
           </div>
         </details>

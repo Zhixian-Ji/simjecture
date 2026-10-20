@@ -28,7 +28,9 @@ class NativeStudyRequest(MVPLaunchRequest):
     execution_backend: Literal["bubblewrap", "proot-cooperative", "process-cooperative"] = (
         "bubblewrap"
     )
-    mode: Literal["minimal", "structured", "frontier"] = "minimal"
+    mode: Literal["minimal"] = "minimal"
+    engine: Literal["native"] = "native"
+    dsh_session_id: None = None
     backend: Literal["codex-glm", "codex", "grok", "agy", "builtin"] = "codex-glm"
     completion_policy: Literal["answer", "repair"] = "repair"
     provider_config: str | None = None
@@ -48,6 +50,10 @@ class NativeStudyRequest(MVPLaunchRequest):
 
 
 def materialize_native(request, *, resume=False):
+    if request.mode != "minimal" or request.engine != "native":
+        from .mvp_launch import REMOVED_WORKFLOW_MESSAGE
+
+        raise ValueError(REMOVED_WORKFLOW_MESSAGE)
     root = Path(request.output_directory).expanduser().resolve()
     record = root / "study-launch.json"
     existing = read(record)
@@ -139,38 +145,18 @@ def materialize_native(request, *, resume=False):
     if not resume:
         if root.exists() and any(root.iterdir()):
             raise ValueError("Choose a new empty study directory")
-        if request.mode == "minimal":
-            service = ResearchService.create(
-                root,
-                request.hypothesis,
-                wall_seconds=request.max_wall_seconds,
-                capabilities=request.capability_directory,
-                execution_backend=request.execution_backend,
-                completion_policy=request.completion_policy,
-                execution_pool=pool,
-                allow_solver_development=request.allow_solver_development,
-                method_review_scope=request.method_review_scope,
-            )
-            service.freeze_protocol(protocol)
-        else:
-            from .campaign_kernel import CampaignKernel
-            from .mvp_agent import MVPAgentConfig
-            from .mvp_skills import MVPCapabilityRegistry
-
-            CampaignKernel.open(
-                workspace=root,
-                hypothesis=request.hypothesis,
-                config=MVPAgentConfig(
-                    execution_backend=request.execution_backend,
-                    max_wall_seconds=request.max_wall_seconds,
-                    require_independent_contract_review=True,
-                ),
-                capabilities=(
-                    MVPCapabilityRegistry.discover(request.capability_directory)
-                    if request.capability_directory
-                    else None
-                ),
-            )
+        service = ResearchService.create(
+            root,
+            request.hypothesis,
+            wall_seconds=request.max_wall_seconds,
+            capabilities=request.capability_directory,
+            execution_backend=request.execution_backend,
+            completion_policy=request.completion_policy,
+            execution_pool=pool,
+            allow_solver_development=request.allow_solver_development,
+            method_review_scope=request.method_review_scope,
+        )
+        service.freeze_protocol(protocol)
     directory = Path(existing.get("state_dir") or root / "supervisor")
     if resume:
         state = read(directory / "state.json")
@@ -270,6 +256,10 @@ def resume_native(root):
     if not record.get("request"):
         raise ResumeError("Repeat the original study command to resume this direct CLI study")
     saved = record["request"]
+    if record.get("mode", saved.get("mode")) != "minimal":
+        from .mvp_launch import REMOVED_WORKFLOW_MESSAGE
+
+        raise ResumeError(REMOVED_WORKFLOW_MESSAGE)
     if "director_enabled" not in saved:
         saved = saved | {"director_enabled": False}
     if "allow_solver_development" not in saved:

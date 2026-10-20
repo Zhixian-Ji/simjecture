@@ -11,7 +11,6 @@ from typing import Any
 import httpx
 import pytest
 
-from conjecture_solver.cli import build_parser
 from conjecture_solver.literature import LiteratureSearchRecord, LiteratureSearchStatus
 from conjecture_solver.llm import CompletionResult, ModelRoute
 from conjecture_solver.mvp_agent import (
@@ -5913,35 +5912,6 @@ def test_builtin_warpx_cuda_openpmd_executes_inside_sandbox(
         "mesh_records_readable": True,
         "scientific_evidence_eligible": False,
     }
-
-
-def test_mvp_cli_accepts_natural_language_hypothesis_and_instruction() -> None:
-    args = build_parser().parse_args(
-        [
-            "mvp",
-            "--hypothesis",
-            "A charged particle's magnetic moment is conserved when the field varies slowly.",
-            "--instruction",
-            "Use the installed WarpX capability.",
-        ]
-    )
-    assert args.command == "mvp"
-    assert not hasattr(args, "tool_config")
-    assert args.instruction == "Use the installed WarpX capability."
-    assert args.max_iterations is None
-
-
-def test_mvp_cli_accepts_guided_commission_manifest() -> None:
-    args = build_parser().parse_args(
-        [
-            "mvp",
-            "--hypothesis",
-            "A bounded hypothesis.",
-            "--guided-commission",
-            "guided_commission.json",
-        ]
-    )
-    assert args.guided_commission == "guided_commission.json"
 
 
 def test_optional_guided_protocol_preserves_legacy_package_identity(

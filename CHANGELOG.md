@@ -4,6 +4,18 @@ This project follows semantic versioning. Dates use ISO 8601.
 
 ## Unreleased
 
+### Breaking changes
+
+- Minimal is the only supported autonomous study workflow. Remove classical/MVP,
+  DSH, structured and frontier launch/resume routes from the CLI, browser and TUI.
+  Keep archived records readable; resume older workflows in their original version.
+- Remove the bundled DSH runtime, profile, Node dependencies, installer option and
+  `dsh` Python extra. The independent low-level MCP bridge uses the `mcp` extra;
+  workspace and knowledge MCP dependencies remain included in their own extras.
+- Keep native CLI agents and the built-in API agent on the minimal workflow. See
+  [migration guidance](docs/how-to/minimal-migration.md) before upgrading older runs.
+
+
 - Add a local knowledge library shared across workspace conversations. Connect
   research folders, search text/code/PDF/Office/notebook sources and completed
   discussions, preview and attach versioned passages, and choose each conversation's

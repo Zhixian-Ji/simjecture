@@ -63,10 +63,9 @@ additional dependencies only when they are needed for your contribution.
   General executor qualification additionally requires a dedicated Linux host,
   reserved job accounts, Landlock and libseccomp; the operator examples under
   `scripts/setup_public_*` must be adapted to that host
-- **DSH integration:** use `uv sync --frozen --extra dsh` and the Node version
-  pinned in [CI](.github/workflows/ci.yml), then run `npm ci --prefix integrations/dsh`
-  and `SIMJECTURE_MCP_EXECUTABLE="$PWD/.venv/bin/simjecture-mcp" npm test --prefix integrations/dsh`.
-  See the [adapter guide](integrations/dsh/README.md#adapter-validation)
+- **MCP interfaces:** install `--extra mcp` for the low-level compatibility bridge
+  or `--extra knowledge` for the knowledge library. Run `tests/test_mcp_server.py`
+  and `tests/test_knowledge.py` for protocol changes. DSH is no longer bundled.
 - **Execution backends and scientific runtimes:** follow the relevant capability
   guide and probe the actual backend before testing. See
   [adding a capability](docs/how-to/add-a-capability.md) and

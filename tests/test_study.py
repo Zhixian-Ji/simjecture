@@ -7,23 +7,22 @@ import pytest
 from conjecture_solver.study import configure_parser, run, selected_mode
 
 
-def test_new_default_and_explicit_modes_preserve_resume(tmp_path):
+def test_new_default_and_archived_modes_cannot_resume(tmp_path):
     assert selected_mode(tmp_path) == "minimal"
-    assert selected_mode(tmp_path, "frontier") == "frontier"
+    for mode in ["structured", "frontier", "legacy"]:
+        with pytest.raises(ValueError, match="have been removed"):
+            selected_mode(tmp_path, mode)
     (tmp_path / "research.json").write_text("{}")
     assert selected_mode(tmp_path) == "minimal"
-    with pytest.raises(ValueError, match="immutable"):
-        selected_mode(tmp_path, "structured")
     (tmp_path / "research.json").unlink()
     state = tmp_path / "old-supervisor"
     state.mkdir()
     (state / "state.json").write_text(json.dumps(dict(workflow="frontier")))
-    assert selected_mode(tmp_path, state_dir=state) == "frontier"
-    with pytest.raises(ValueError, match="immutable"):
-        selected_mode(tmp_path, "minimal", state)
+    with pytest.raises(ValueError, match="have been removed"):
+        selected_mode(tmp_path, state_dir=state)
 
 
-@pytest.mark.parametrize("mode", ["minimal", "structured", "frontier"])
+@pytest.mark.parametrize("mode", ["minimal"])
 def test_launch_modes_materialize_correct_records(tmp_path, monkeypatch, mode):
     from conjecture_solver.agent_supervisor import AgentSupervisor
     from conjecture_solver.research_supervisor import ResearchSupervisor

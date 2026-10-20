@@ -368,7 +368,7 @@ uv run --extra workspace --group docs python scripts/check_docs_links.py docs/_b
 
 最后的链接检查会指出缺失的本地页面或文件。若复用过不同主题的旧输出目录，可换一个新的构建目录，避免旧文件影响结果。
 
-浏览器测试需要额外的 `browser` 依赖组和 Chromium；完整命令、公共服务和 DSH 等专项检查见 [CONTRIBUTING.md](https://github.com/tomzhu0225/simjecture/blob/main/CONTRIBUTING.md)。普通回归测试不应使用真实密钥或消耗付费模型额度。
+浏览器测试需要额外的 `browser` 依赖组和 Chromium；完整命令、公共服务和 MCP 等专项检查见 [CONTRIBUTING.md](https://github.com/tomzhu0225/simjecture/blob/main/CONTRIBUTING.md)。普通回归测试不应使用真实密钥或消耗付费模型额度。
 
 测试失败时，先区分代码错误、缺依赖和机器不支持的执行环境。把未运行的检查写清楚，不要把“没有测试”写成“通过”，也不要删除检查来掩盖失败。
 

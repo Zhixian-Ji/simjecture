@@ -14,7 +14,7 @@ import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-PREFIXES = {"src", "skills", "capabilities", "environments", "integrations", "scripts"}
+PREFIXES = {"src", "skills", "capabilities", "environments", "scripts"}
 FILES = {"pyproject.toml", "uv.lock", "README.md", "LICENSE"}
 FORBIDDEN = {".private", ".runtime", ".venv", "__pycache__", "node_modules", ".env"}
 

@@ -120,6 +120,7 @@ research/status
 how-to/headless-studies
 how-to/projects-and-workspaces
 how-to/research-service
+how-to/minimal-migration
 how-to/continuation-steering
 how-to/extend-study
 how-to/minimal-oversight

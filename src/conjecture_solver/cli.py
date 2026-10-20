@@ -39,24 +39,14 @@ from .deployment import (
 from .discovery import DiscoveryPackage
 from .domains import installed_domain_plugins
 from .ledger import SQLiteEventLedger
-from .literature import PublicLiteratureSearchClient
 from .llm import MissingCredential, ModelRoute, OpenAICompatibleClient
-from .mvp_agent import BubblewrapSandbox, MVPAgentConfig, MVPAgentRunner
-from .mvp_control import CampaignPaused
-from .mvp_guidance import MVPGuidedCommissioningPackage
 from .mvp_launch import (
     ResumeError,
-    persist_operator_launch,
     prepare_resume,
     request_verified_pause,
     start_managed_campaign,
 )
 from .mvp_monitor import format_human_status, load_run_snapshot, watch_run
-from .mvp_skills import (
-    MVPCapabilityRegistry,
-    MVPSkillCatalog,
-    discover_builtin_mvp_resources,
-)
 from .orchestration import MultiActionCampaignRunner
 from .outbox import JournaledCompletionClient
 from .research_tools import SubprocessResearchTool, SubprocessResearchToolConfig
@@ -416,161 +406,6 @@ def _research(args: argparse.Namespace) -> int:
     return 0
 
 
-def _mvp(args: argparse.Namespace) -> int:
-    if args.use_glm and not args.reason:
-        raise ValueError("--use-glm requires --reason")
-    hypothesis = (
-        args.hypothesis if args.hypothesis is not None else Path(args.hypothesis_file).read_text()
-    )
-    if args.instruction is not None and args.instruction_file is not None:
-        raise ValueError("use only one of --instruction or --instruction-file")
-    if args.instruction_file is not None:
-        instruction = Path(args.instruction_file).read_text()
-    else:
-        instruction = args.instruction
-    if instruction is not None and not instruction.strip():
-        instruction = None
-    config = MVPAgentConfig(
-        max_iterations=args.max_iterations,
-        max_wall_seconds=args.max_wall_seconds,
-        max_command_seconds=args.max_command_seconds,
-        max_workspace_bytes=args.max_workspace_mb * 1024 * 1024,
-        max_file_bytes=args.max_file_mb * 1024 * 1024,
-        max_memory_bytes=args.max_memory_mb * 1024 * 1024,
-        max_tool_output_chars=args.max_tool_output_chars,
-        command_heartbeat_seconds=args.command_heartbeat_seconds,
-        recent_full_turns=args.recent_full_turns,
-        max_model_retries=args.max_model_retries,
-        model_failover_after=args.model_failover_after,
-    )
-    output = Path(args.output).resolve()
-    output.mkdir(parents=True, exist_ok=True)
-    persist_operator_launch(
-        hypothesis=hypothesis,
-        instruction=instruction,
-        campaign_id=args.campaign_id,
-        output_directory=output,
-        max_wall_seconds=args.max_wall_seconds,
-        max_command_seconds=args.max_command_seconds,
-        max_workspace_mb=args.max_workspace_mb,
-        max_file_mb=args.max_file_mb,
-        max_memory_mb=args.max_memory_mb,
-        max_iterations=args.max_iterations,
-        max_tool_output_chars=args.max_tool_output_chars,
-        command_heartbeat_seconds=args.command_heartbeat_seconds,
-        literature_search_timeout_seconds=args.literature_search_timeout_seconds,
-        recent_full_turns=args.recent_full_turns,
-        max_model_retries=args.max_model_retries,
-        model_failover_after=args.model_failover_after,
-        ledger=args.ledger,
-        guided_commission=args.guided_commission,
-        skills_directory=args.skills_directory,
-        capability_directory=args.capability_directory,
-        use_glm=args.use_glm,
-        reason=args.reason,
-    )
-    skills, capabilities = discover_builtin_mvp_resources()
-    if args.skills_directory:
-        skills = MVPSkillCatalog.discover(args.skills_directory)
-    if args.capability_directory:
-        capabilities = MVPCapabilityRegistry.discover(args.capability_directory)
-    guided_commissioning = (
-        MVPGuidedCommissioningPackage.read(args.guided_commission)
-        if args.guided_commission
-        else None
-    )
-    ledger_path = Path(args.ledger) if args.ledger else output / "mvp_ledger.sqlite3"
-    route = ModelRoute.ESCALATION if args.use_glm else ModelRoute.DEFAULT
-    with SQLiteEventLedger(ledger_path) as ledger:
-        try:
-            raw_provider = OpenAICompatibleClient.from_environment()
-        except MissingCredential:
-            raw_provider = _ReplayOnlyCompletionClient()
-        provider = JournaledCompletionClient(
-            campaign_id=args.campaign_id,
-            ledger=ledger,
-            client=raw_provider,
-        )
-        try:
-            report = MVPAgentRunner(
-                hypothesis=hypothesis,
-                campaign_instruction=instruction,
-                output_directory=output,
-                completion_client=provider,
-                sandbox=BubblewrapSandbox(
-                    output / "workspace",
-                    config,
-                    capabilities,
-                ),
-                config=config,
-                skills=skills,
-                capabilities=capabilities,
-                guided_commissioning=guided_commissioning,
-                literature_search=PublicLiteratureSearchClient(
-                    timeout_seconds=args.literature_search_timeout_seconds,
-                ),
-                route=route,
-                escalation_reason=args.reason,
-            ).run()
-        except CampaignPaused as paused:
-            if not ledger.verify_chain(args.campaign_id):
-                raise RuntimeError(
-                    "MVP model-call ledger hash chain failed verification"
-                ) from paused
-            print("mode=natural-language-sandbox-mvp")
-            print(f"campaign={args.campaign_id}")
-            print("status=paused")
-            print("pause=action_boundary")
-            print(f"iterations={paused.iterations}")
-            print(f"resume=simjecture resume {output}")
-            print(f"transcript={output / 'transcript.jsonl'}")
-            return 0
-        if not ledger.verify_chain(args.campaign_id):
-            raise RuntimeError("MVP model-call ledger hash chain failed verification")
-    open_ids = list(report.open_claim_ids)
-    closed_ids = list(report.closed_claim_ids)
-    if not open_ids and not closed_ids and report.claim_ledger:
-        for claim in report.claim_ledger.get("claims", []):
-            claim_id = str(claim.get("id", ""))
-            if not claim_id:
-                continue
-            if claim.get("status") == "open":
-                open_ids.append(claim_id)
-            else:
-                closed_ids.append(claim_id)
-    print("mode=natural-language-sandbox-mvp")
-    print(f"campaign={args.campaign_id}")
-    print(f"status={report.status}")
-    print(f"iterations={report.iterations}")
-    print(f"artifacts={len(report.workspace_artifacts)}")
-    print(f"open_claims={','.join(open_ids) or '-'}")
-    print(f"closed_claims={','.join(closed_ids) or '-'}")
-    claims = list((report.claim_ledger or {}).get("claims") or [])
-    if claims:
-        print(f"claim_count={len(claims)}")
-        for claim in claims:
-            claim_id = str(claim.get("id", "?"))
-            status = str(claim.get("status", "?"))
-            kind = str(claim.get("kind", "?"))
-            relation = str(claim.get("relation", "?"))
-            evidence_n = len(claim.get("evidence") or [])
-            print(
-                f"claim={claim_id} status={status} kind={kind} "
-                f"relation={relation} evidence={evidence_n}"
-            )
-    for note in report.finish_claim_notes:
-        print(f"finish_claim_note={note}")
-    print(f"claim_ledger={output / 'hypothesis_ledger.json'}")
-    print(f"claim_summary={output / 'claim_summary.md'}")
-    print(f"report={output / 'mvp_report.json'}")
-    print(f"transcript={output / 'transcript.jsonl'}")
-    if report.status == "cancelled":
-        return 130
-    if report.status == "provider_failed":
-        return 75
-    return 0
-
-
 def _status(args: argparse.Namespace) -> int:
     snapshot = load_run_snapshot(args.run_directory)
     if args.json:
@@ -669,19 +504,6 @@ def _web(args: argparse.Namespace) -> int:
     )
 
 
-def _dsh_run(args: argparse.Namespace) -> int:
-    from .dsh_engine import run_from_cli
-
-    return run_from_cli(args)
-
-
-def _dsh_profile(_args: argparse.Namespace) -> int:
-    from .dsh_engine import bundled_profile_path
-
-    print(bundled_profile_path())
-    return 0
-
-
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="simjecture")
     subcommands = parser.add_subparsers(dest="command", required=True)
@@ -701,7 +523,7 @@ def build_parser() -> argparse.ArgumentParser:
     from .study import configure_parser
 
     configure_parser(
-        subcommands.add_parser("study", help="Launch a native-agent study (default mode: minimal)")
+        subcommands.add_parser("study", help="Launch a minimal research study")
     )
 
     steer = subcommands.add_parser("steer", help="Send advisory guidance to a minimal study")
@@ -886,93 +708,6 @@ def build_parser() -> argparse.ArgumentParser:
     research.add_argument("--reason")
     research.set_defaults(handler=_research)
 
-    mvp = subcommands.add_parser(
-        "mvp",
-        help="Give a natural-language hypothesis to a generic sandboxed research agent",
-    )
-    hypothesis_source = mvp.add_mutually_exclusive_group(required=True)
-    hypothesis_source.add_argument("--hypothesis")
-    hypothesis_source.add_argument("--hypothesis-file")
-    mvp.add_argument(
-        "--instruction",
-        help=(
-            "Optional natural-language operational constraint kept separate from "
-            "the root hypothesis"
-        ),
-    )
-    mvp.add_argument(
-        "--instruction-file",
-        help="Read the optional operational instruction from a preserved file",
-    )
-    mvp.add_argument(
-        "--guided-commission",
-        help=(
-            "Path to a content-addressed successful-prerun manifest whose files "
-            "are installed as a non-evidentiary autonomous starting point"
-        ),
-    )
-    mvp.add_argument("--campaign-id", default="campaign_natural_language_mvp_v1")
-    mvp.add_argument("--ledger")
-    mvp.add_argument("--output", default="artifacts/natural-language-mvp")
-    mvp.add_argument(
-        "--max-iterations",
-        type=int,
-        default=None,
-        help="Optional positive model-turn ceiling; omitted means unlimited turns",
-    )
-    mvp.add_argument("--max-wall-seconds", type=float, default=21_600.0)
-    mvp.add_argument("--max-command-seconds", type=float, default=600.0)
-    mvp.add_argument("--max-workspace-mb", type=int, default=512)
-    mvp.add_argument("--max-file-mb", type=int, default=64)
-    mvp.add_argument("--max-memory-mb", type=int, default=4096)
-    mvp.add_argument("--max-tool-output-chars", type=int, default=30_000)
-    mvp.add_argument("--command-heartbeat-seconds", type=float, default=30.0)
-    mvp.add_argument(
-        "--literature-search-timeout-seconds",
-        type=float,
-        default=20.0,
-        help=(
-            "Per-provider timeout for the required startup reconnaissance attempt; "
-            "provider failure is recorded and does not block computation"
-        ),
-    )
-    mvp.add_argument(
-        "--recent-full-turns",
-        type=int,
-        default=8,
-        help=(
-            "Keep this many recent model turns fully detailed in the prompt; "
-            "older actions and tool results are compacted while the durable transcript "
-            "stays complete"
-        ),
-    )
-    mvp.add_argument(
-        "--max-model-retries",
-        type=int,
-        default=3,
-        help=(
-            "Retry this many transient or empty model responses after the initial "
-            "attempt; successful model turns remain unlimited"
-        ),
-    )
-    mvp.add_argument(
-        "--model-failover-after",
-        type=int,
-        default=2,
-        help="Switch to the alternate model route after this many consecutive failures",
-    )
-    mvp.add_argument(
-        "--skills-directory",
-        help="Override the built-in read-only skill catalog directory",
-    )
-    mvp.add_argument(
-        "--capability-directory",
-        help="Override the built-in installed-capability configuration directory",
-    )
-    mvp.add_argument("--use-glm", action="store_true")
-    mvp.add_argument("--reason")
-    mvp.set_defaults(handler=_mvp)
-
     status = subcommands.add_parser(
         "status",
         help="Show a compact snapshot of a durable MVP run directory",
@@ -1004,7 +739,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     watch = subcommands.add_parser(
         "watch",
-        help="Follow durable MVP events until a terminal report appears",
+        help="Follow durable research records until a terminal report appears",
     )
     watch.add_argument("run_directory")
     watch.add_argument(
@@ -1033,7 +768,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     web = subcommands.add_parser(
         "web",
-        help="Open the primary local interface for durable MVP campaigns",
+        help="Open the local research workspace",
     )
     web.add_argument(
         "run_directory",
@@ -1073,9 +808,9 @@ def build_parser() -> argparse.ArgumentParser:
     web.set_defaults(no_open=False)
     web.add_argument(
         "--engine",
-        choices=("dsh", "native"),
-        default="dsh",
-        help="Engine for explicitly selected legacy campaigns (default: dsh)",
+        choices=("native",),
+        default="native",
+        help=argparse.SUPPRESS,
     )
     web.add_argument(
         "--read-only",
@@ -1109,18 +844,6 @@ def build_parser() -> argparse.ArgumentParser:
 
     serve.set_defaults(handler=public_server)
 
-    dsh_profile = subcommands.add_parser(
-        "dsh-profile",
-        help="Print the bundled DeepSeek Harness profile directory",
-    )
-    dsh_profile.set_defaults(handler=_dsh_profile)
-
-    dsh_run = subcommands.add_parser("dsh-run", help=argparse.SUPPRESS)
-    dsh_run.add_argument("--output", required=True)
-    dsh_run.add_argument("--session-id", required=True)
-    dsh_run.add_argument("--resume", action="store_true")
-    dsh_run.set_defaults(handler=_dsh_run)
-
     pause = subcommands.add_parser(
         "pause",
         help="Request a pause at the next MVP action boundary",
@@ -1130,7 +853,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     resume = subcommands.add_parser(
         "resume",
-        help="Resume a paused or incomplete MVP campaign from stored operator input",
+        help="Resume a minimal study from its saved launch contract",
     )
     resume.add_argument("run_directory")
     resume.add_argument(

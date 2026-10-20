@@ -1,4 +1,4 @@
-"""Safe subprocess construction for operator-launched MVP campaigns.
+"""Minimal study process lifecycle and read-only historical launch contracts.
 
 The launcher materializes operator inputs as files and never builds a shell
 string. Hypothesis text stays out of argv except as a path to those files.
@@ -36,7 +36,13 @@ GUIDED_COMMISSIONING_DIR_NAME = "guided_commissioning"
 RUN_LOCK_NAME = "runner.lock"
 CAMPAIGN_ID_PATTERN = r"^[A-Za-z][A-Za-z0-9_.-]{0,127}$"
 DSH_SESSION_ID_PATTERN = r"^[A-Za-z][A-Za-z0-9_.-]{0,127}$"
+# Historical engine values remain readable in archived launch records.
 ReasoningEngine = Literal["native", "dsh"]
+REMOVED_WORKFLOW_MESSAGE = (
+    "Classical/MVP, DSH, structured and frontier workflows have been removed. "
+    "Start a new minimal study with 'simjecture study' or the workspace. "
+    "Existing records remain readable; resume older workflows with their original version."
+)
 
 
 class MVPLaunchRequest(StrictModel):
@@ -129,244 +135,7 @@ def materialize_operator_input(
 
     if isinstance(request, NativeStudyRequest):
         return materialize_native(request, resume=resume)
-    output = Path(request.output_directory).expanduser().resolve()
-    if create_output:
-        output.mkdir(parents=True, exist_ok=True)
-    if not output.is_dir():
-        raise NotADirectoryError(f"output path is not a directory: {output}")
-    if output_lock_is_held(output):
-        raise RunAlreadyActiveError(f"another runner owns the output directory: {output}")
-    operator = _secure_operator_directory(output, create=True)
-    hypothesis_file = operator / HYPOTHESIS_FILE_NAME
-    hypothesis_text = request.hypothesis
-    instruction_file: Path | None = None
-    instruction_text: str | None = None
-    if request.instruction and request.instruction.strip():
-        instruction_file = operator / INSTRUCTION_FILE_NAME
-        instruction_text = request.instruction
-
-    guided_package = None
-    guided_file: Path | None = None
-    guided_sha256: str | None = None
-    if request.guided_commission:
-        from .mvp_guidance import MVPGuidedCommissioningPackage
-
-        guided_package = MVPGuidedCommissioningPackage.read(request.guided_commission)
-        guided_file = operator / GUIDED_COMMISSIONING_DIR_NAME / "manifest.json"
-        guided_sha256 = guided_package.package_sha256
-
-    normalized = request.model_copy(
-        update={
-            "output_directory": str(output),
-            "instruction": instruction_text,
-            "ledger": _normalized_optional_path(request.ledger),
-            "guided_commission": str(guided_file) if guided_file else None,
-            "skills_directory": _normalized_optional_path(request.skills_directory),
-            "capability_directory": _normalized_optional_path(request.capability_directory),
-            "dsh_session_id": (
-                request.dsh_session_id
-                or (_default_dsh_session_id(request) if request.engine == "dsh" else None)
-            ),
-        }
-    )
-    argv = build_launch_argv(
-        normalized,
-        hypothesis_file=hypothesis_file,
-        instruction_file=instruction_file,
-        resume=resume,
-    )
-    launch_record = operator / LAUNCH_RECORD_NAME
-    blocked = _automatic_resume_blockers(normalized, output)
-    record: dict[str, Any] = {
-        "schema_version": "0.3.0",
-        "campaign_id": normalized.campaign_id,
-        "hypothesis_file": hypothesis_file.name,
-        "hypothesis_sha256": _sha256_text(hypothesis_text),
-        "instruction_file": instruction_file.name if instruction_file else None,
-        "instruction_sha256": (
-            _sha256_text(instruction_text) if instruction_text is not None else None
-        ),
-        "guided_commission": (
-            f"{GUIDED_COMMISSIONING_DIR_NAME}/manifest.json" if guided_file else None
-        ),
-        "guided_commission_sha256": guided_sha256,
-        "output_directory": str(output),
-        "max_wall_seconds": normalized.max_wall_seconds,
-        "max_command_seconds": normalized.max_command_seconds,
-        "max_workspace_mb": normalized.max_workspace_mb,
-        "max_file_mb": normalized.max_file_mb,
-        "max_memory_mb": normalized.max_memory_mb,
-        "max_iterations": normalized.max_iterations,
-        "max_tool_output_chars": normalized.max_tool_output_chars,
-        "command_heartbeat_seconds": normalized.command_heartbeat_seconds,
-        "literature_search_timeout_seconds": (normalized.literature_search_timeout_seconds),
-        "recent_full_turns": normalized.recent_full_turns,
-        "max_model_retries": normalized.max_model_retries,
-        "model_failover_after": normalized.model_failover_after,
-        "ledger": _recorded_path(normalized.ledger, output),
-        "skills_directory": _recorded_path(normalized.skills_directory, output),
-        "capability_directory": _recorded_path(normalized.capability_directory, output),
-        "use_glm": normalized.use_glm,
-        "reason": normalized.reason,
-        "engine": normalized.engine,
-        "dsh_session_id": normalized.dsh_session_id,
-        "automatic_resume_blockers": blocked,
-        "argv": list(argv),
-        "written_at": datetime.now(UTC).isoformat(),
-    }
-    existing = _load_secure_json(launch_record, root=output)
-    if existing is not None:
-        _assert_launch_record_matches(
-            existing,
-            desired=record,
-            output=output,
-            hypothesis_text=hypothesis_text,
-            instruction_text=instruction_text,
-        )
-        if existing.get("schema_version") in {"0.2.0", "0.3.0"}:
-            return MVPLaunchPlan(
-                request=normalized,
-                output_directory=str(output),
-                hypothesis_file=str(hypothesis_file),
-                instruction_file=str(instruction_file) if instruction_file else None,
-                guided_commission_file=str(guided_file) if guided_file else None,
-                launch_record=str(launch_record),
-                controller_log=str(output / CONTROLLER_LOG_NAME),
-                argv=argv,
-                engine=normalized.engine,
-                dsh_session_id=normalized.dsh_session_id,
-            )
-    else:
-        _assert_unrecorded_output_is_compatible(
-            output,
-            operator=operator,
-            request=normalized,
-            hypothesis_text=hypothesis_text,
-            instruction_text=instruction_text,
-            guided_commission_sha256=guided_sha256,
-        )
-
-    _atomic_write_text(hypothesis_file, hypothesis_text)
-    if instruction_file is not None and instruction_text is not None:
-        _atomic_write_text(instruction_file, instruction_text)
-    if guided_package is not None and guided_file is not None:
-        _materialize_guided_package(guided_package, guided_file)
-    _atomic_write_text(launch_record, json.dumps(record, indent=2, sort_keys=True) + "\n")
-    return MVPLaunchPlan(
-        request=normalized,
-        output_directory=str(output),
-        hypothesis_file=str(hypothesis_file),
-        instruction_file=str(instruction_file) if instruction_file else None,
-        guided_commission_file=str(guided_file) if guided_file else None,
-        launch_record=str(launch_record),
-        controller_log=str(output / CONTROLLER_LOG_NAME),
-        argv=argv,
-        engine=normalized.engine,
-        dsh_session_id=normalized.dsh_session_id,
-    )
-
-
-def build_launch_argv(
-    request: MVPLaunchRequest,
-    *,
-    hypothesis_file: Path,
-    instruction_file: Path | None,
-    resume: bool = False,
-) -> tuple[str, ...]:
-    """Build the reviewed native or DSH supervisor command without inline science text."""
-
-    if request.engine == "dsh":
-        return build_dsh_argv(request, resume=resume)
-    return build_mvp_argv(
-        request,
-        hypothesis_file=hypothesis_file,
-        instruction_file=instruction_file,
-    )
-
-
-def build_dsh_argv(
-    request: MVPLaunchRequest,
-    *,
-    resume: bool = False,
-) -> tuple[str, ...]:
-    """Build the stable Python supervisor command for one DSH session."""
-
-    if request.engine != "dsh" or request.dsh_session_id is None:
-        raise ValueError("a DSH launch requires a durable dsh_session_id")
-    executable = request.executable or default_mvp_executable()
-    argv = [
-        *executable,
-        "dsh-run",
-        "--output",
-        str(Path(request.output_directory).expanduser().resolve()),
-        "--session-id",
-        request.dsh_session_id,
-    ]
-    if resume:
-        argv.append("--resume")
-    if any("\x00" in item for item in argv):
-        raise ValueError("command arguments cannot contain NUL bytes")
-    return tuple(argv)
-
-
-def build_mvp_argv(
-    request: MVPLaunchRequest,
-    *,
-    hypothesis_file: Path,
-    instruction_file: Path | None,
-) -> tuple[str, ...]:
-    executable = request.executable or default_mvp_executable()
-    argv = [
-        *executable,
-        "mvp",
-        "--hypothesis-file",
-        str(hypothesis_file),
-        "--campaign-id",
-        request.campaign_id,
-        "--output",
-        str(Path(request.output_directory).expanduser().resolve()),
-        "--max-wall-seconds",
-        _format_number(request.max_wall_seconds),
-        "--max-command-seconds",
-        _format_number(request.max_command_seconds),
-        "--max-workspace-mb",
-        str(request.max_workspace_mb),
-        "--max-file-mb",
-        str(request.max_file_mb),
-        "--max-memory-mb",
-        str(request.max_memory_mb),
-        "--max-tool-output-chars",
-        str(request.max_tool_output_chars),
-        "--command-heartbeat-seconds",
-        _format_number(request.command_heartbeat_seconds),
-        "--literature-search-timeout-seconds",
-        _format_number(request.literature_search_timeout_seconds),
-        "--recent-full-turns",
-        str(request.recent_full_turns),
-        "--max-model-retries",
-        str(request.max_model_retries),
-        "--model-failover-after",
-        str(request.model_failover_after),
-    ]
-    if instruction_file is not None:
-        argv.extend(["--instruction-file", str(instruction_file)])
-    if request.max_iterations is not None:
-        argv.extend(["--max-iterations", str(request.max_iterations)])
-    if request.ledger:
-        argv.extend(["--ledger", request.ledger])
-    if request.guided_commission:
-        argv.extend(["--guided-commission", request.guided_commission])
-    if request.skills_directory:
-        argv.extend(["--skills-directory", request.skills_directory])
-    if request.capability_directory:
-        argv.extend(["--capability-directory", request.capability_directory])
-    if request.use_glm:
-        argv.append("--use-glm")
-    if request.reason:
-        argv.extend(["--reason", request.reason])
-    if any("\x00" in item for item in argv):
-        raise ValueError("command arguments cannot contain NUL bytes")
-    return tuple(argv)
+    raise ValueError(REMOVED_WORKFLOW_MESSAGE)
 
 
 def read_process_identity(
@@ -524,6 +293,10 @@ def start_managed_campaign(
     *,
     popen: Any = subprocess.Popen,
 ) -> ManagedCampaign:
+    from .study_launch import NativeStudyRequest
+
+    if not isinstance(plan.request, NativeStudyRequest) or plan.request.mode != "minimal":
+        raise ValueError(REMOVED_WORKFLOW_MESSAGE)
     log_path = Path(plan.controller_log)
     log_path.parent.mkdir(parents=True, exist_ok=True)
     log_handle = log_path.open("ab", buffering=0)
@@ -564,61 +337,6 @@ def start_managed_campaign(
 
 class ResumeError(ValueError):
     """A campaign cannot be resumed from the stored operator launch record."""
-
-
-def persist_operator_launch(
-    *,
-    hypothesis: str,
-    instruction: str | None,
-    campaign_id: str,
-    output_directory: str | Path,
-    max_wall_seconds: float,
-    max_command_seconds: float,
-    max_workspace_mb: int,
-    max_file_mb: int,
-    max_memory_mb: int,
-    max_iterations: int | None = None,
-    max_tool_output_chars: int = 30_000,
-    command_heartbeat_seconds: float = 30.0,
-    literature_search_timeout_seconds: float = 20.0,
-    recent_full_turns: int = 8,
-    max_model_retries: int = 3,
-    model_failover_after: int = 2,
-    ledger: str | None = None,
-    guided_commission: str | None = None,
-    skills_directory: str | None = None,
-    capability_directory: str | None = None,
-    use_glm: bool = False,
-    reason: str | None = None,
-) -> MVPLaunchPlan:
-    """Write the complete structured launch contract for safe later resume."""
-
-    return materialize_operator_input(
-        MVPLaunchRequest(
-            hypothesis=hypothesis,
-            instruction=instruction,
-            campaign_id=validate_campaign_id(campaign_id),
-            output_directory=str(output_directory),
-            max_wall_seconds=max_wall_seconds,
-            max_command_seconds=max_command_seconds,
-            max_workspace_mb=max_workspace_mb,
-            max_file_mb=max_file_mb,
-            max_memory_mb=max_memory_mb,
-            max_iterations=max_iterations,
-            max_tool_output_chars=max_tool_output_chars,
-            command_heartbeat_seconds=command_heartbeat_seconds,
-            literature_search_timeout_seconds=literature_search_timeout_seconds,
-            recent_full_turns=recent_full_turns,
-            max_model_retries=max_model_retries,
-            model_failover_after=model_failover_after,
-            ledger=ledger,
-            guided_commission=guided_commission,
-            skills_directory=skills_directory,
-            capability_directory=capability_directory,
-            use_glm=use_glm,
-            reason=reason,
-        )
-    )
 
 
 def load_launch_request(run_directory: str | Path) -> MVPLaunchRequest | None:
@@ -771,20 +489,7 @@ def prepare_resume(run_directory: str | Path) -> MVPLaunchPlan:
         return resume_native(root)
     if not root.is_dir():
         raise ResumeError(f"run directory does not exist: {root}")
-    if (root / "mvp_report.json").is_file():
-        raise ResumeError("a terminal report exists; repeating the original mvp command replays it")
-    if output_lock_is_held(root):
-        raise ResumeError("a runner already owns this output directory; attach instead")
-    record = load_supervisor_record(root)
-    if record is not None and process_identity_matches(record):
-        raise ResumeError(f"process still running (pid={record.pid}); attach instead")
-    request = load_launch_request(root)
-    if request is None:
-        raise ResumeError(
-            "no operator_input/launch.json; repeat the original mvp command to resume"
-        )
-    return materialize_operator_input(request, resume=True)
-
+    raise ResumeError(REMOVED_WORKFLOW_MESSAGE)
 
 def request_graceful_cancel(
     identity: ProcessIdentity,
@@ -1027,19 +732,6 @@ def _load_secure_json(path: Path, *, root: Path) -> dict[str, Any] | None:
     return payload if isinstance(payload, dict) else None
 
 
-def _normalized_optional_path(value: str | None) -> str | None:
-    return str(Path(value).expanduser().resolve()) if value else None
-
-
-def _recorded_path(value: str | None, output: Path) -> str | None:
-    if value is None:
-        return None
-    resolved = Path(value).expanduser().resolve()
-    if resolved.is_relative_to(output):
-        return resolved.relative_to(output).as_posix()
-    return str(resolved)
-
-
 def _load_recorded_path(value: Any, root: Path, description: str) -> str | None:
     if value is None:
         return None
@@ -1052,303 +744,8 @@ def _load_recorded_path(value: Any, root: Path, description: str) -> str | None:
     return str(resolved)
 
 
-def _automatic_resume_blockers(
-    request: MVPLaunchRequest,
-    output: Path,
-) -> list[str]:
-    blockers: list[str] = []
-    for label, value in (
-        ("ledger", request.ledger),
-        ("skills directory", request.skills_directory),
-        ("capability directory", request.capability_directory),
-    ):
-        if value is not None and not Path(value).resolve().is_relative_to(output):
-            blockers.append(f"{label} is outside the run directory")
-    if request.executable and tuple(request.executable) != default_mvp_executable():
-        blockers.append("custom executable is not replayed from an artifact")
-    return blockers
-
-
-_CONTRACT_KEYS = frozenset(
-    {
-        "campaign_id",
-        "hypothesis_file",
-        "hypothesis_sha256",
-        "instruction_file",
-        "instruction_sha256",
-        "guided_commission",
-        "guided_commission_sha256",
-        "max_wall_seconds",
-        "max_command_seconds",
-        "max_workspace_mb",
-        "max_file_mb",
-        "max_memory_mb",
-        "max_iterations",
-        "max_tool_output_chars",
-        "command_heartbeat_seconds",
-        "literature_search_timeout_seconds",
-        "recent_full_turns",
-        "max_model_retries",
-        "model_failover_after",
-        "ledger",
-        "skills_directory",
-        "capability_directory",
-        "use_glm",
-        "reason",
-        "engine",
-        "dsh_session_id",
-        "automatic_resume_blockers",
-    }
-)
-
-_V2_CONTRACT_KEYS = _CONTRACT_KEYS - {"engine", "dsh_session_id"}
-
-
-def _assert_launch_record_matches(
-    existing: dict[str, Any],
-    *,
-    desired: dict[str, Any],
-    output: Path,
-    hypothesis_text: str,
-    instruction_text: str | None,
-) -> None:
-    schema = existing.get("schema_version")
-    if schema == "0.3.0":
-        differences = sorted(key for key in _CONTRACT_KEYS if existing.get(key) != desired.get(key))
-        if differences:
-            raise LaunchConflictError(
-                "output directory already contains a different launch contract "
-                f"({', '.join(differences)})"
-            )
-    elif schema == "0.2.0":
-        differences = sorted(
-            key for key in _V2_CONTRACT_KEYS if existing.get(key) != desired.get(key)
-        )
-        if desired.get("engine") != "native":
-            differences.append("engine")
-        if differences:
-            raise LaunchConflictError(
-                "output directory already contains a different launch contract "
-                f"({', '.join(differences)})"
-            )
-    elif schema == "0.1.0":
-        legacy_keys = {
-            "campaign_id",
-            "hypothesis_file",
-            "instruction_file",
-            "max_wall_seconds",
-            "max_command_seconds",
-            "max_workspace_mb",
-            "max_file_mb",
-            "max_memory_mb",
-            "max_iterations",
-        }
-        differences = sorted(key for key in legacy_keys if existing.get(key) != desired.get(key))
-        advanced_defaults = all(
-            desired.get(key) == value
-            for key, value in {
-                "max_tool_output_chars": 30_000,
-                "command_heartbeat_seconds": 30.0,
-                "literature_search_timeout_seconds": 20.0,
-                "recent_full_turns": 12,
-                "max_model_retries": 3,
-                "model_failover_after": 2,
-                "ledger": None,
-                "guided_commission": None,
-                "skills_directory": None,
-                "capability_directory": None,
-                "use_glm": False,
-                "reason": None,
-            }.items()
-        )
-        if differences or not advanced_defaults:
-            raise LaunchConflictError("legacy launch record does not match the requested contract")
-    else:
-        raise LaunchConflictError(f"unsupported existing launch schema: {schema!r}")
-
-    operator = _secure_operator_directory(output, create=False)
-    hypothesis_path = _contained_regular_file(
-        output,
-        operator / HYPOTHESIS_FILE_NAME,
-        description="stored hypothesis",
-    )
-    if hypothesis_path.read_text() != hypothesis_text:
-        raise LaunchConflictError("stored hypothesis differs from the requested contract")
-    instruction_path = operator / INSTRUCTION_FILE_NAME
-    if instruction_text is None:
-        if instruction_path.exists() or instruction_path.is_symlink():
-            raise LaunchConflictError("stored instruction differs from the requested contract")
-    else:
-        contained = _contained_regular_file(
-            output,
-            instruction_path,
-            description="stored instruction",
-        )
-        if contained.read_text() != instruction_text:
-            raise LaunchConflictError("stored instruction differs from the requested contract")
-    guided_manifest = operator / GUIDED_COMMISSIONING_DIR_NAME / "manifest.json"
-    expected_guided_sha = desired.get("guided_commission_sha256")
-    if expected_guided_sha is None:
-        if guided_manifest.exists() or guided_manifest.is_symlink():
-            raise LaunchConflictError("unexpected guided commissioning in output directory")
-    else:
-        contained_guided = _contained_regular_file(
-            output,
-            guided_manifest,
-            description="guided commissioning manifest",
-        )
-        from .mvp_guidance import MVPGuidedCommissioningPackage
-
-        package = MVPGuidedCommissioningPackage.read(contained_guided)
-        if package.package_sha256 != expected_guided_sha:
-            raise LaunchConflictError("guided commissioning differs from the requested contract")
-
-
-def _assert_unrecorded_output_is_compatible(
-    output: Path,
-    *,
-    operator: Path,
-    request: MVPLaunchRequest,
-    hypothesis_text: str,
-    instruction_text: str | None,
-    guided_commission_sha256: str | None,
-) -> None:
-    launch_path = operator / LAUNCH_RECORD_NAME
-    if launch_path.exists() or launch_path.is_symlink():
-        raise LaunchConflictError("existing launch.json is malformed or unsafe")
-    hypothesis_path = operator / HYPOTHESIS_FILE_NAME
-    if hypothesis_path.exists() or hypothesis_path.is_symlink():
-        contained = _contained_regular_file(
-            output,
-            hypothesis_path,
-            description="stored hypothesis",
-        )
-        if contained.read_text() != hypothesis_text:
-            raise LaunchConflictError("stored hypothesis differs from the requested contract")
-    instruction_path = operator / INSTRUCTION_FILE_NAME
-    if instruction_path.exists() or instruction_path.is_symlink():
-        if instruction_text is None:
-            raise LaunchConflictError("unexpected stored instruction in output directory")
-        contained = _contained_regular_file(
-            output,
-            instruction_path,
-            description="stored instruction",
-        )
-        if contained.read_text() != instruction_text:
-            raise LaunchConflictError("stored instruction differs from the requested contract")
-
-    manifest_path = output / "mvp_manifest.json"
-    manifest = _load_secure_json(manifest_path, root=output)
-    if manifest_path.exists() and manifest is None:
-        raise LaunchConflictError("existing MVP manifest is malformed or unsafe")
-    if manifest is not None:
-        if (
-            manifest.get("hypothesis") != request.hypothesis
-            or manifest.get("campaign_instruction") != request.instruction
-        ):
-            raise LaunchConflictError("MVP manifest belongs to a different hypothesis")
-        config = manifest.get("config")
-        expected_config = {
-            "max_iterations": request.max_iterations,
-            "max_wall_seconds": request.max_wall_seconds,
-            "max_command_seconds": request.max_command_seconds,
-            "max_workspace_bytes": request.max_workspace_mb * 1024 * 1024,
-            "max_file_bytes": request.max_file_mb * 1024 * 1024,
-            "max_memory_bytes": request.max_memory_mb * 1024 * 1024,
-            "max_tool_output_chars": request.max_tool_output_chars,
-            "command_heartbeat_seconds": request.command_heartbeat_seconds,
-            "recent_full_turns": request.recent_full_turns,
-            "max_model_retries": request.max_model_retries,
-            "model_failover_after": request.model_failover_after,
-        }
-        if not isinstance(config, dict) or any(
-            config.get(key) != value for key, value in expected_config.items()
-        ):
-            raise LaunchConflictError("MVP manifest has a different resource contract")
-        existing_guided = manifest.get("guided_commissioning")
-        existing_guided_sha = (
-            existing_guided.get("package_sha256")
-            if isinstance(existing_guided, dict) and existing_guided
-            else None
-        )
-        if existing_guided_sha != guided_commission_sha256:
-            raise LaunchConflictError("MVP manifest has different guided commissioning")
-        from .mvp_skills import (
-            MVPCapabilityRegistry,
-            MVPSkillCatalog,
-            discover_builtin_mvp_resources,
-        )
-
-        skills, capabilities = discover_builtin_mvp_resources()
-        if request.skills_directory:
-            skills = MVPSkillCatalog.discover(request.skills_directory)
-        if request.capability_directory:
-            capabilities = MVPCapabilityRegistry.discover(request.capability_directory)
-        if (
-            manifest.get("skill_hashes") != skills.hashes
-            or manifest.get("capability_hashes") != capabilities.hashes
-        ):
-            raise LaunchConflictError("MVP manifest has different skill or capability identities")
-        return
-
-    allowed_operator = {path.name for path in (hypothesis_path, instruction_path) if path.exists()}
-    unexpected_operator = {
-        path.name for path in operator.iterdir() if path.name not in allowed_operator
-    }
-    declared_top_level: set[str] = set()
-    for value in (
-        request.ledger,
-        request.skills_directory,
-        request.capability_directory,
-    ):
-        if value is None:
-            continue
-        resolved = Path(value).resolve()
-        if resolved.is_relative_to(output) and resolved != output:
-            declared_top_level.add(resolved.relative_to(output).parts[0])
-    unexpected_output = {
-        path.name
-        for path in output.iterdir()
-        if path != operator and path.name not in declared_top_level
-    }
-    if unexpected_operator or unexpected_output:
-        raise LaunchConflictError(
-            "refusing to initialize a non-empty directory without an MVP manifest"
-        )
-
-
-def _materialize_guided_package(package: Any, manifest_path: Path) -> None:
-    if package.manifest_path == manifest_path:
-        package.assert_identity()
-        return
-    destination = manifest_path.parent
-    if destination.is_symlink():
-        raise LaunchConflictError("guided commissioning destination must not be a symlink")
-    if destination.exists() and any(destination.iterdir()):
-        raise LaunchConflictError("guided commissioning destination is not empty")
-    destination.mkdir(parents=True, exist_ok=True)
-    _atomic_write_bytes(manifest_path, package.manifest_path.read_bytes())
-    for record in package.file_records:
-        target = destination / record.path
-        target.parent.mkdir(parents=True, exist_ok=True)
-        if target.parent.resolve().is_relative_to(destination.resolve()) is False:
-            raise LaunchConflictError("guided commissioning file escapes its destination")
-        _atomic_write_bytes(target, package.read_file(record.path))
-
-
 def _sha256_text(text: str) -> str:
     return hashlib.sha256(text.encode()).hexdigest()
-
-
-def _default_dsh_session_id(request: MVPLaunchRequest) -> str:
-    identity = "\0".join(
-        (
-            request.campaign_id,
-            str(Path(request.output_directory).expanduser().resolve()),
-            _sha256_text(request.hypothesis),
-        )
-    )
-    return f"simjecture-{hashlib.sha256(identity.encode()).hexdigest()[:24]}"
 
 
 def _read_process_argv(pid: int) -> tuple[str, ...] | None:
@@ -1445,9 +842,3 @@ def _atomic_write_bytes(path: Path, encoded: bytes) -> None:
 
 def _atomic_write_text(path: Path, text: str) -> None:
     _atomic_write_bytes(path, text.encode())
-
-
-def _format_number(value: float) -> str:
-    if value.is_integer():
-        return str(int(value))
-    return repr(value)

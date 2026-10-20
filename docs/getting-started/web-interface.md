@@ -24,8 +24,8 @@ plots can still be previewed inside the conversation.
 
 The local web interface is the primary human-facing view of a Simjecture
 campaign. It makes the scientific structure visible without replacing the
-durable record. New native studies default to minimal; mode, backend and model
-are separate launch choices. Minimal reads `research.json`, experiment snapshots,
+durable record. New studies use minimal; choose the agent backend and model
+for the launch. Minimal reads `research.json`, experiment snapshots,
 commitments and reviews. Legacy `mvp_manifest.json`, `transcript.jsonl`,
 `hypothesis_ledger.json`, `mvp_report.json`, and artifact provenance remain the
 sources of truth.
@@ -33,8 +33,8 @@ sources of truth.
 Minimal studies show actual agent activity instead of the fixed-stage role strip.
 The header shows mode/backend/model and remaining budget. Long guidance and review
 rationales fold away, with failed reviews expanded. Usage is pending/unavailable
-when the backend has not supplied counters, never assumed to be zero. DSH/API
-remain explicitly labelled legacy routes; incompatible combinations are disabled.
+when the backend has not supplied counters, never assumed to be zero. Archived
+DSH activity remains visible, but its launch route is removed.
 
 ## Open a recorded campaign
 
@@ -160,29 +160,18 @@ page stores a user-supplied compatible API key in a private mode-0600 server fil
 it does not send that key back to the browser.
 
 ```bash
-export DEEPSEEK_API_KEY='your-process-local-key'
 uv run simjecture web --runs-root artifacts
 ```
 
-Campaigns launched in the browser use the same structured
-`operator_input/launch.json` contract as the TUI and CLI. No shell command is
-constructed from hypothesis text. Legacy DSH campaigns use an
-installed DeepSeek Harness profile. DSH owns provider routing,
-retries, conversation compaction, and the resumable model session; Simjecture
-continues to own the hypothesis graph, evidence rules, sandbox, capabilities,
-jobs, and durable scientific record. The DSH session is stored inside the
-campaign and reopened by **Resume** rather than replaced with a blank model
-conversation.
+The advanced form launches minimal research with a native CLI agent using its
+existing login. For the built-in API agent, configure **Connections** and prepare
+a study from a workspace conversation. Both use the same minimal evidence workflow.
 
-The built-in reasoning loop remains available for compatibility and diagnosis:
-
-```bash
-uv run simjecture web --engine native
-```
-
-Viewing and controlling an already recorded campaign does not require Node.js
-or DSH. Only the explicit legacy DSH route needs the
-[DSH deployment guide](../how-to/deepseek-harness.md).
+Browser, TUI and CLI studies preserve `study-launch.json` and the exact operator
+input files. No shell command is constructed from hypothesis text. Minimal is the
+only launch mode; legacy DSH/API, structured and frontier choices are removed.
+Historical records remain inspectable without Node.js or DSH. See
+[migration](../how-to/minimal-migration.md) before upgrading an older running study.
 
 ## Local security boundary
 

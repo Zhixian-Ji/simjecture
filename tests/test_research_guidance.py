@@ -124,7 +124,7 @@ def test_non_evidence_annotation_reaches_review_without_metadata_rerun(tmp_path)
         s.packet(packet["request"])
 
 
-@pytest.mark.parametrize("mode", ["minimal", "structured", "frontier"])
+@pytest.mark.parametrize("mode", ["minimal"])
 def test_guided_study_launch_and_resume_in_each_mode(tmp_path, monkeypatch, mode):
     import argparse
     import sys

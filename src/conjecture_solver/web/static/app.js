@@ -165,6 +165,7 @@ async function initialize() {
     document.getElementById("launch-execution-backend").value = bootstrap.default_execution_backend || "bubblewrap";
     document.getElementById("launch-backend").value = bootstrap.default_backend || "codex-glm";
     document.getElementById("launch-model").value = bootstrap.default_model || "";
+    updateLaunchRoute();
     document.querySelector('[name="capability_directory"]').value = bootstrap.default_capabilities || "";
     loadGraphPositions();
     ui["new-run-button"].disabled = !state.allowMutations;
@@ -2002,8 +2003,6 @@ async function launchCampaign(event) {
     campaign_id: form.get("campaign_id") || null,
     max_wall_seconds: Number(form.get("max_wall_seconds")),
     max_command_seconds: Number(form.get("max_command_seconds")),
-    max_workspace_mb: Number(form.get("max_workspace_mb")),
-    max_memory_mb: Number(form.get("max_memory_mb")),
   };
   if (payload.mode === "minimal") payload.allow_solver_development = document.getElementById("launch-solver-development").value === "allow";
   ui["launch-button"].disabled = true;
@@ -2399,27 +2398,12 @@ function debounce(callback, delay) {
 }
 
 
-// Keep unsupported routes explicit; never silently change the selected mode.
+// Minimal is the sole workflow; backends select the agent connection.
 function updateLaunchRoute() {
-  const mode = document.getElementById("launch-mode");
   const backend = document.getElementById("launch-backend");
   const model = document.getElementById("launch-model");
-  const legacy = mode.value === "legacy";
-  document.getElementById("launch-solver-development").disabled = mode.value !== "minimal";
-  for (const option of backend.options) {
-    option.disabled = legacy !== ["dsh", "api"].includes(option.value);
-  }
-  if (backend.selectedOptions[0]?.disabled) backend.value = legacy ? "dsh" : "codex-glm";
-  document.getElementById("launch-execution-backend").disabled = legacy;
-  model.required = !legacy && backend.value !== "codex-glm";
-  model.disabled = legacy;
+  model.required = backend.value !== "codex-glm";
   model.placeholder = backend.value === "codex-glm" ? "glm-5.3 (default)" : "Enter the backend model ID";
-  document.getElementById("launch-route-note").textContent = legacy
-    ? "DSH and API use the legacy evidence workflow. Minimal support for these routes is not available yet."
-    : "Uses your existing backend login. Native tools remain available. Minimal studies include recorded experiments, counterexample search and independent review.";
-  const limits = document.querySelector("#new-run-form details");
-  if (limits) limits.hidden = !legacy;
 }
-document.getElementById("launch-mode").addEventListener("change", updateLaunchRoute);
 document.getElementById("launch-backend").addEventListener("change", updateLaunchRoute);
 updateLaunchRoute();

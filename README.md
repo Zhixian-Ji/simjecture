@@ -33,8 +33,12 @@ validation evidence. Missing evidence sends the work back through the loop.
 
 The **answer** policy can also finish with a reviewed falsification of the original
 claim. New browser studies default to answer; the CLI defaults to repair. Both use
-minimal mode by default: flexible agent strategy, recorded experiments and explicit
+the minimal workflow: flexible agent strategy, recorded experiments and explicit
 scientific acceptance. A deadline can leave the question unresolved.
+
+The next release removes classical/MVP, DSH, structured and frontier launch routes.
+Existing records remain readable. See the [migration guide](docs/how-to/minimal-migration.md)
+for new launches and handling older runs.
 
 New minimal studies allow experimental solver development by default. The agent can
 work in a private source fork while preserving the reference installation. Changed

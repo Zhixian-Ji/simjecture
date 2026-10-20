@@ -13,7 +13,6 @@ from conjecture_solver.cli import build_parser
 from conjecture_solver.mvp_launch import (
     MVPLaunchRequest,
     MVPOutputLock,
-    materialize_operator_input,
 )
 from conjecture_solver.web.application import (
     SimjectureWebApplication,
@@ -496,7 +495,9 @@ def test_create_campaign_rejects_invalid_operator_fields(tmp_path: Path) -> None
 
 def test_web_projects_bounded_dsh_engine_activity_and_usage(tmp_path: Path) -> None:
     root = tmp_path / "dsh-run"
-    plan = materialize_operator_input(
+    from .legacy_records import write_legacy_launch
+
+    write_legacy_launch(
         MVPLaunchRequest(
             hypothesis="A DSH activity projection is not private chain-of-thought.",
             campaign_id="campaign-dsh-web",
@@ -555,7 +556,7 @@ def test_web_projects_bounded_dsh_engine_activity_and_usage(tmp_path: Path) -> N
     payload = application.campaign_snapshot(application.initial_campaign or "")
     engine = payload["engine"]
     assert engine["name"] == "dsh"
-    assert engine["session_id"] == plan.dsh_session_id
+    assert engine["session_id"] == "archived-session"
     assert engine["status"] == "running"
     assert engine["resumed"] is True
     assert engine["token_usage"] == {
@@ -651,7 +652,7 @@ def test_web_cli_contract() -> None:
     assert args.port == 0
     assert args.no_open is True
     assert args.read_only is True
-    assert args.engine == "dsh"
+    assert args.engine == "native"
 
     native = build_parser().parse_args(["web", "--open", "--engine", "native"])
     assert native.no_open is False

@@ -1,22 +1,13 @@
 # Simjecture Linux launch package
 
-This is the legacy launch archive, not the one-command workspace installer
-linked from the repository README. Its `setup.sh` installs the `tui` extra and
-requires an existing Python/Bubblewrap host; it does not perform the workspace
-installer's Python provisioning, built-in API setup or restricted-host preparation.
-For a new conversation workspace, prefer the versioned workspace installer
-described in the repository installation guide.
+This archive contains the Python distribution and a local workspace launcher.
+Read `VERSION` and `CHANGELOG.md` for the release. The versioned workspace installer
+linked from the repository README can also provision Python on a fresh host.
 
-This package contains matching Python and DSH bundles. Read `VERSION` for the
-release number and `CHANGELOG.md` for release notes.
-
-Requirements: Linux (including WSL2) with working Bubblewrap user namespaces,
-Python 3.11+ with venv/pip, and internet access for dependencies and model calls.
-Install and log in to at least one supported native agent CLI separately:
-Codex GLM, Codex, Grok or AGY. The package uses that CLI's existing login and does
-not contain or configure subscriptions. CUDA and numerical instruments are optional.
-
-From the extracted directory:
+Requirements: Linux or WSL2, Python 3.11+ with venv/pip, Bubblewrap with working
+user namespaces, and internet access for Python dependencies. Install and log in
+to your chosen native agent CLI separately, or configure a compatible API in the
+workspace's Connections page. No credentials or subscriptions are bundled.
 
 ```bash
 sha256sum -c SHA256SUMS
@@ -24,17 +15,12 @@ bash setup.sh
 bash launch.sh
 ```
 
-New studies default to **minimal**. The launch form separates mode, backend and
-model. Choose structured or frontier if preferred. Non-GLM native backends require
-an explicit model ID. Native tools remain available; accepted evidence still
-requires recorded experiments and independent review.
+Setup creates this directory's `.venv` with the workspace and TUI extras. Opening
+the interface does not submit a study. Minimal is the only supported study workflow;
+DSH, classical/MVP, structured and frontier routes are removed. No DSH bundle or
+Node runtime is installed. `setup.sh --with-dsh` is no longer supported.
 
-DSH and direct API routes remain explicit **legacy** choices. They do not silently
-fall back from minimal. To install the isolated DSH runtime too, use
-`bash setup.sh --with-dsh` (Node 22.19+ or 24+, npm required), then configure your
-DSH provider credentials. Neither setup nor opening the interface submits a study.
-
-For a live terminal launch:
+For a headless study, using your configured backend and model:
 
 ```bash
 .venv/bin/simjecture study --campaign campaigns/example \
@@ -42,32 +28,18 @@ For a live terminal launch:
   --backend codex-glm --model glm-5.3 --wall-seconds 3600
 ```
 
-The terminal shows mode/backend, activity, elapsed/remaining time and experiment
-counts. Redirected output gets periodic plain progress lines; `--quiet` suppresses
-those lines. `simjecture tui campaigns/example` and the browser can inspect the
-same durable study. Existing studies preserve mode and deadline when resumed.
-
-Setup installs into this directory's `.venv` and `run-state`. It does not replace
-global DSH, another Simjecture installation, or your existing DSH profile. The
-launcher starts from `campaigns`; keep this directory and its research workspaces
-when moving or backing up the installation. The package is not an offline
-installer and contains no API keys or account logins. Credentials come from your
-terminal environment or your own DSH configuration.
-
-`launch.sh` forwards arguments to `simjecture web`, for example:
+`launch.sh` forwards arguments to `simjecture web`. To inspect an older record:
 
 ```bash
-bash launch.sh --help
 bash launch.sh /absolute/path/to/existing/campaign --read-only
 ```
 
-For legacy DSH campaigns, back up the campaign before upgrading. The
-research session uses a separate workspace and the `.research-v1` identity;
-older conversations remain available, while the new researcher reconstructs
-scientific state from the kernel. Image inspection requires a vision-capable
-model. Native exploratory work does not automatically become scientific evidence.
-Built-in file/shell tools enforce DSH's research-workspace policy; installed
-plugins and workflow code remain trusted host-process code.
+Back up existing work and finish or pause older workflows before upgrading.
+This release can inspect old records but cannot resume their removed workflows;
+keep the original environment for that purpose. Existing minimal studies retain
+their launch contracts and deadlines. Start a new directory when bringing an older
+question into minimal, and treat old outputs as context rather than fresh evidence.
 
-Simote is optional and distributed independently. This package does not install
-Simote or configure remote machines.
+Keep the `campaigns` directory when moving or backing up this installation. This
+archive is not an offline installer and does not install scientific solvers or
+configure remote machines.

@@ -1,5 +1,9 @@
 # DSH upgrade assessment — 2026-09-20
 
+> Historical integration documentation. Classical and DSH study routes are removed
+> from the next release. Use [minimal research](minimal-migration.md) for new studies;
+> preserve the original environment to run these older integrations.
+
 Migration implemented: Simjecture profile `0.2.3` pins DSH `0.1.5-rc.2`.
 The scientific CampaignKernel and its evidence contract remain unchanged.
 The adapter changes and validation described below replace the earlier

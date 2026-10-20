@@ -1,7 +1,7 @@
 # How the system fits together
 
 Simjecture separates the agent's freedom to investigate from the authority to
-accept a scientific claim. The current default is **minimal** mode, available
+accept a scientific claim. The supported workflow is **minimal** mode, available
 through the browser workspace and headless launcher.
 
 ## Human direction and study state
@@ -76,9 +76,10 @@ establishes a scientific answer.
 
 ## Other workflows and historical records
 
-Structured and frontier workflows remain explicit launcher choices. DSH and the
-legacy campaign kernel retain their own contracts and role interfaces. Existing
-studies keep their recorded mode; they are not migrated silently.
+Minimal is the only supported study workflow. Classical/MVP, DSH, structured
+and frontier launch routes are removed. Existing records can still be inspected;
+resume those workflows only in their original environment. See
+[migration](../how-to/minimal-migration.md).
 
 The [classic architecture](../archive/classic-architecture.md) and
 [classic evidence model](../archive/classic-evidence-and-claims.md) explain those
