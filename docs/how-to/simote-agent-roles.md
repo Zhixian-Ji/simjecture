@@ -1,7 +1,7 @@
 # Scientific roles with Simote agent sessions
 
 > Historical integration documentation. Classical and DSH study routes are removed
-> from the next release. Use [minimal research](minimal-migration.md) for new studies;
+> from 0.6.3. Use [minimal research](minimal-migration.md) for new studies;
 > preserve the original environment to run these older integrations.
 
 Simote can run Codex, Grok, and AGY (Antigravity) CLI agents as claim-scoped Simjecture workers.

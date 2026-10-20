@@ -90,6 +90,33 @@ per file and are limited to the visitor's own project. Artifact clicks download
 by default; safe raster images have a separate preview response. HTML/SVG are not
 served as active same-origin documents.
 
+## Workspaces, projects and conversation knowledge
+
+Signed-in visitors can create workspaces and projects from the sidebar. A workspace
+keeps its conversation list and knowledge sources separate. Projects organize related
+conversations and provide shared descriptions and instructions to the hosted agent.
+Existing conversations appear in **Personal**. Workspaces and projects belong to the
+verified account and are available across its signed-in browsers; they are not shared
+with other accounts. Upload scientific files within an individual conversation.
+
+**Knowledge** indexes completed user/assistant turns from the selected workspace.
+It backfills existing conversations when opened, searched or refreshed. Browse a
+passage, open its source conversation, or attach it to a new question. Per-conversation
+source selection can disable retrieval. Hosted agents have scoped `knowledge_search`
+and `knowledge_read` tools; retrieved passages are reference context, not accepted
+scientific evidence. Explicit attachments and project guidance are frozen with a job.
+
+The index uses local full-text search, without embeddings or a separate model call.
+Every read rechecks live account and workspace ownership, source selection, and the
+source conversation's deletion status. Deleted messages/conversations remove their
+index rows and full-text entries. The UI offers no host-folder connection or external
+MCP configuration. Guest sessions keep their existing temporary conversation behavior;
+saved organization and knowledge require sign-in.
+
+The index scans up to the latest 5,000 completed turns per account/workspace and
+extracts at most 200,000 characters per turn. Longer turns are marked as excerpts;
+open the original conversation for the complete record.
+
 ## GitHub sign-in and owner access
 
 Register a GitHub OAuth app with the callback

@@ -4,6 +4,19 @@ This project follows semantic versioning. Dates use ISO 8601.
 
 ## Unreleased
 
+## 0.6.3 — 2026-10-20
+
+### Hosted research
+
+- Let signed-in visitors create private workspaces and projects, organize conversations,
+  and share project descriptions and instructions with the assigned agent. Existing
+  conversations stay in Personal, and the same account can access them across browsers.
+- Add a private hosted knowledge library over completed conversation turns. Search,
+  preview and attach exact passages, choose sources per conversation, and let the agent
+  retrieve earlier work. Enforce account/workspace scope on every search and read;
+  deleting a conversation removes its derived search entries. Guest retention and
+  usage limits are unchanged. Hosted visitors cannot connect server folders.
+
 ### Breaking changes
 
 - Minimal is the only supported autonomous study workflow. Remove classical/MVP,
@@ -15,6 +28,7 @@ This project follows semantic versioning. Dates use ISO 8601.
 - Keep native CLI agents and the built-in API agent on the minimal workflow. See
   [migration guidance](docs/how-to/minimal-migration.md) before upgrading older runs.
 
+### Knowledge and research improvements
 
 - Add a local knowledge library shared across workspace conversations. Connect
   research folders, search text/code/PDF/Office/notebook sources and completed
@@ -22,6 +36,8 @@ This project follows semantic versioning. Dates use ISO 8601.
   sources. Expose read-only CLI/MCP retrieval to external agents and preserve the
   passages used during preparation in study records. Index locally without an
   embedding service; keep knowledge retrieval separate from scientific acceptance.
+- Keep a user's navigation choice when a previous conversation is still loading,
+  and close the mobile sidebar when opening another view.
 
 - Connect to an open SOLIDWORKS session with read-only `windows inspect` and
   commission part rebuild/export on SOLIDWORKS 2025. Launch batch jobs in their

@@ -50,13 +50,13 @@ window.WorkspaceProjects = (() => {
     $("home-collection").onclick = () => select(selected);
     for (const button of document.querySelectorAll("[data-close-organization]")) button.onclick = () => $(button.dataset.closeOrganization).close();
     $("create-space-form").onsubmit = async (event) => {
-      event.preventDefault(); const button = event.submitter;
+      event.preventDefault(); const button = event.submitter || event.currentTarget.querySelector("button[type=submit]");
       button.disabled = true;
       try { const result = await api("workspaces", {name: $("new-space-name").value}); switchSpace(result.id); }
       catch (error) { $("space-error").textContent = error.message; button.disabled = false; }
     };
     $("collection-form").onsubmit = async event => {
-      event.preventDefault(); const button = event.submitter; button.disabled = true;
+      event.preventDefault(); const button = event.submitter || event.currentTarget.querySelector("button[type=submit]"); button.disabled = true;
       try {
         const result = await api("collections", { ...(editing ? {id: editing} : {}), name: $("collection-name").value, description: $("collection-summary").value, instructions: $("collection-guidance").value});
         await reloadProjects(); $("collection-dialog").close(); select(result.id);
@@ -120,7 +120,9 @@ window.WorkspaceProjects = (() => {
     for (const file of collection.files) {const link = el("a", file.name); link.href = workspaceURL(`/api/workspace/collection-download?id=${encodeURIComponent(id)}&path=${encodeURIComponent(file.name)}`); $("collection-files").append(link);}
     $("collection-instructions").textContent = collection.context_error || collection.instructions || "";
     $("edit-collection").disabled = state.readonly;
-    $("collection-upload").disabled = state.readonly;
+    $("collection-upload").disabled = state.readonly || (hosted && !state.hosting?.permissions?.project_files);
+    document.querySelector('label[for="collection-upload"]').hidden = hosted && !state.hosting?.permissions?.project_files;
+    if (hosted) $("collection-upload").title = "Add scientific files within a conversation.";
     $("collection-new-chat").disabled = state.readonly;
     render(); return true;
   }

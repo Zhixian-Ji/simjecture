@@ -1,6 +1,6 @@
 # Move to the minimal research workflow
 
-Starting with the next release, **minimal is the only supported autonomous study
+Starting with 0.6.3, **minimal is the only supported autonomous study
 workflow**. Classical/MVP, DSH, structured and frontier launch routes are removed.
 This is a breaking change; it does not convert existing scientific records.
 

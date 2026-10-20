@@ -8,6 +8,40 @@ from conjecture_solver.web.application import SimjectureWebApplication
 from conjecture_solver.web.server import create_server
 
 
+def test_knowledge_navigation_supersedes_a_loading_conversation(tmp_path):
+    playwright = pytest.importorskip("playwright.sync_api")
+    app = SimjectureWebApplication(runs_root=tmp_path / "artifacts")
+    conversation = app.workspace.create({"name": "Slow conversation"})
+    server = create_server(app, port=0)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    pending = []
+    try:
+        with playwright.sync_playwright() as runtime:
+            browser = runtime.chromium.launch(headless=True)
+            page = browser.new_page()
+            base = f"http://127.0.0.1:{server.server_port}"
+            page.goto(base + "/workspace")
+            page.wait_for_function(
+                "() => state.token && !document.getElementById('home-model').disabled"
+            )
+            page.route("**/api/workspace/project?*", lambda route: pending.append(route))
+            page.goto(base + f"/workspace#project={conversation['id']}")
+            page.wait_for_function("() => state.routing")
+            page.locator("#knowledge-nav").click()
+            playwright.expect(page).to_have_url(base + "/workspace#knowledge")
+            playwright.expect(page.locator("#view-knowledge")).to_be_visible()
+            assert len(pending) == 1
+            pending.pop().continue_()
+            page.wait_for_function("() => !state.routing")
+            playwright.expect(page.locator("#view-knowledge")).to_be_visible()
+            playwright.expect(page.locator("#view-project")).to_be_hidden()
+            playwright.expect(page).to_have_url(base + "/workspace#knowledge")
+            browser.close()
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
 def test_connect_search_preview_scope_and_attach(tmp_path):
     playwright = pytest.importorskip("playwright.sync_api")
     folder = tmp_path / "reference-library"

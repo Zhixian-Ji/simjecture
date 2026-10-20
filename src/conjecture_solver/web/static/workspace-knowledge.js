@@ -12,14 +12,20 @@ window.WorkspaceKnowledge = (() => {
     const node = el("button", label, cls); node.type = "button"; node.onclick = handler; return node;
   }
   function init(data) {
-    enabled = !!data.knowledge_available && !hosted;
+    enabled = !!data.knowledge_available;
     if (!enabled) return;
     $("knowledge-nav").hidden = false;
     $("home-knowledge").hidden = false;
     $("conversation-knowledge").hidden = false;
     $("knowledge-connect").disabled = state.readonly;
+    $("knowledge-connect").hidden = data.knowledge_capabilities?.connect_folders === false;
+    document.querySelector('[data-knowledge-tab="access"]').hidden = data.knowledge_capabilities?.external_access === false;
+    if (hosted) document.querySelector("#knowledge-sources-panel .knowledge-section-intro p").textContent =
+      "Completed replies from your conversations in this workspace. Search and refresh update the index.";
+    if (hosted) $("knowledge-privacy-note").textContent = "Private to your account and workspace";
     $("knowledge-refresh").disabled = state.readonly;
     for (const [value, name] of Object.entries(names)) {
+      if (data.knowledge_capabilities?.kinds && !data.knowledge_capabilities.kinds.includes(value)) continue;
       const node = button(name, () => {
         category = value;
         for (const child of $("knowledge-kinds").children) child.setAttribute("aria-pressed", String(child === node));
@@ -135,6 +141,7 @@ window.WorkspaceKnowledge = (() => {
         const empty = el("div", undefined, "knowledge-empty");
         empty.append(el("h2", query ? "No matching sources yet" : "Your research, within reach"));
         empty.append(el("p", query ? "Try a distinctive phrase, a filename, or fewer words. Check Sources if a folder is still indexing." :
+          hosted ? "Completed replies from your conversations in this workspace will appear here." :
           "Connect a research folder to find papers, code and notes. Completed conversations and study reports will also appear here."));
         empty.append(button("View connected sources", () => tab("sources")));
         $("knowledge-results").append(empty);

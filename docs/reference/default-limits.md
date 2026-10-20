@@ -207,7 +207,7 @@ Sources: [public worker][public-worker], [public store][public-store], [public w
 
 ## Classic, structured and DSH paths
 
-These describe archived workflows, removed from the next release. Their values
+These describe archived workflows, removed from 0.6.3. Their values
 remain here to interpret historical records; they are not selectable launch paths. The running built-in minimal API worker does **not** pass through DSH. Sources: [classic config/sandbox][sandbox], [classic launch][classic-launch], [kernel][kernel], [assignment store][assignments], [MCP bridge][mcp], [DSH profile][dsh-profile], [context elision][dsh-context], [role plugin][dsh-roles], [job waiter][dsh-waiter], [numerical plans][parameters], [proposal generation][proposals], [search generation][search].
 
 | Limit | Default / maximum | Necessity and recommendation |

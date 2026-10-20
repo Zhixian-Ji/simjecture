@@ -132,9 +132,12 @@ function md(node, text) {
   window.WorkspaceRich.render(node, String(text || ""), state.project);
 }
 function view(name) {
-  if(hosted && ["settings","machines","knowledge"].includes(name)) name="home";
+  if(hosted && (["settings","machines"].includes(name) ||
+    (name === "knowledge" && !state.hosting?.permissions?.knowledge))) name="home";
   if (name !== "project") ++state.projectRequest;
   const changed = state.view !== name;
+  if (changed && matchMedia("(max-width: 600px)").matches)
+    globalThis.WorkspacePanels?.set("left", true);
   state.view = name;
   $("right-sidebar-toggle").hidden = name !== "project";
   for (const section of document.querySelectorAll(".view"))
@@ -195,7 +198,7 @@ async function followRoute({ reveal = true } = {}) {
   try {
     const params = new URLSearchParams(location.hash.slice(1)),
       id = params.get("project");
-    if (params.get("knowledge") && !hosted) {
+    if (params.get("knowledge") && (!hosted || state.hosting?.permissions?.knowledge)) {
       view("knowledge");
       await globalThis.WorkspaceKnowledge?.openRoute(params);
     } else if (id) {
@@ -1769,7 +1772,12 @@ async function boot() {
   await followRoute({ reveal: false });
 }
 for (const item of document.querySelectorAll("[data-view]"))
-  item.onclick = () => {if(item.dataset.view === "home")globalThis.WorkspaceProjects?.setSelected(null); view(item.dataset.view);};
+  item.onclick = () => {
+    if (item.dataset.view === "home") globalThis.WorkspaceProjects?.setSelected(null);
+    // User navigation supersedes an unfinished route, including its pending fetches.
+    location.hash = item.dataset.view;
+    view(item.dataset.view);
+  };
 $("connection-button").onclick = () => view("settings");
 $("rail-toggle").onclick = () => $("left-sidebar-toggle").click();
 $("rail-new-project").onclick = () => $("new-project").click();

@@ -68,7 +68,13 @@ class Identities:
             db.execute("DELETE FROM oauth_states WHERE digest=?", (self.digest(state),))
         return dict(row) if row else None
 
-    def create_project(self, owner, name):
+    def create_project(self, owner, name, *, workspace="personal", collection=None,
+                       knowledge_sources=None):
+        from .organization import Organization
+
+        organization = Organization(self, owner, workspace)
+        if collection:
+            organization.collection(collection)
         identifier = secrets.token_hex(16)
         with self.connect(write=True) as db:
             count = db.execute(
@@ -77,8 +83,10 @@ class Identities:
             if count >= 100:
                 raise ValueError("Project storage allowance reached")
             db.execute(
-                "INSERT INTO projects(id,owner,name,created) VALUES(?,?,?,?)",
-                (identifier, owner, name, time.time()),
+                "INSERT INTO projects(id,owner,name,created,workspace,collection,knowledge_sources)"
+                " VALUES(?,?,?,?,?,?,?)",
+                (identifier, owner, name, time.time(), workspace, collection,
+                 json.dumps(knowledge_sources) if knowledge_sources is not None else None),
             )
         return self.project(identifier, owner)
 
