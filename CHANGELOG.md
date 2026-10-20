@@ -4,6 +4,13 @@ This project follows semantic versioning. Dates use ISO 8601.
 
 ## Unreleased
 
+- Add a local knowledge library shared across workspace conversations. Connect
+  research folders, search text/code/PDF/Office/notebook sources and completed
+  discussions, preview and attach versioned passages, and choose each conversation's
+  sources. Expose read-only CLI/MCP retrieval to external agents and preserve the
+  passages used during preparation in study records. Index locally without an
+  embedding service; keep knowledge retrieval separate from scientific acceptance.
+
 - Connect to an open SOLIDWORKS session with read-only `windows inspect` and
   commission part rebuild/export on SOLIDWORKS 2025. Launch batch jobs in their
   own process and bind its PID-specific automation interface. Correct pywin32

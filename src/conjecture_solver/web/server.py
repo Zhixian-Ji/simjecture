@@ -67,6 +67,8 @@ STATIC_ASSETS = frozenset(
         "workspace.js",
         "workspace-projects.js",
         "workspace-projects.css",
+        "workspace-knowledge.js",
+        "workspace-knowledge.css",
         "workspace-theme.js",
         "workspace-panels.js",
         "workspace.css",
@@ -110,11 +112,23 @@ class SimjectureHTTPServer(ThreadingHTTPServer):
         self._handoff_thread = None
         self._machine_poll_at = 0
         self._machine_poll_thread = None
+        self._knowledge_at = 0
+        self._knowledge_thread = None
         super().__init__(address, SimjectureRequestHandler)
 
     def service_actions(self):
         from ..machine_availability import POLL_SECONDS
 
+        if (
+            self.application.allow_mutations
+            and time.monotonic() >= self._knowledge_at
+            and not (self._knowledge_thread and self._knowledge_thread.is_alive())
+        ):
+            self._knowledge_at = time.monotonic() + 60
+            self._knowledge_thread = threading.Thread(
+                target=self.application.maintain_workspaces, args=("sync_knowledge",), daemon=True
+            )
+            self._knowledge_thread.start()
         if time.monotonic() >= self._machine_poll_at and not (
             self._machine_poll_thread and self._machine_poll_thread.is_alive()
         ):
@@ -311,10 +325,73 @@ class SimjectureRequestHandler(BaseHTTPRequestHandler):
                         workspace_id=space,
                         control_token=self.server.control_token,
                         allow_mutations=self.server.application.allow_mutations,
+                        knowledge_available=True,
                     )
                 )
             elif endpoint == "collections":
                 self._json(workspace.collections())
+            elif endpoint == "knowledge-status":
+                self._json(workspace.knowledge.status())
+            elif endpoint == "knowledge-access":
+                import shlex
+                import sys
+
+                prefix = [
+                    sys.executable,
+                    "-m",
+                    "conjecture_solver.cli",
+                    "knowledge",
+                    "--runs-root",
+                    str(workspace.knowledge.runs_root),
+                    "--workspace",
+                    space,
+                ]
+                self._json(
+                    {
+                        "mcp": {
+                            "mcpServers": {
+                                "simjecture-knowledge": {
+                                    "command": prefix[0],
+                                    "args": prefix[1:] + ["mcp"],
+                                }
+                            }
+                        },
+                        "cli": shlex.join(prefix + ["search", "your research question"]),
+                        "sync": shlex.join(prefix + ["sync"]),
+                    }
+                )
+            elif endpoint == "knowledge-search":
+                self._json(
+                    workspace.knowledge.search(
+                        query.get("q", [""])[0],
+                        kind=query.get("kind", ["all"])[0],
+                        sources=query.get("source"),
+                        conversation=query.get("conversation", [None])[0],
+                    )
+                )
+            elif endpoint == "knowledge-read":
+                self._json(
+                    workspace.knowledge.read(
+                        self._one_value(query, "id"),
+                        revision=query.get("revision", [None])[0],
+                        chunk=query.get("chunk", [0])[0],
+                        conversation=query.get("conversation", [None])[0],
+                    )
+                )
+            elif endpoint == "knowledge-original":
+                name, body = workspace.knowledge.original(
+                    self._one_value(query, "id"), self._one_value(query, "revision")
+                )
+                self.send_response(200)
+                self.send_header("Content-Type", "application/octet-stream")
+                self.send_header(
+                    "Content-Disposition", "attachment; filename*=UTF-8''" + quote(name)
+                )
+                self.send_header("Content-Length", str(len(body)))
+                for key, value in ARTIFACT_SECURITY_HEADERS.items():
+                    self.send_header(key, value)
+                self.end_headers()
+                self.wfile.write(body)
             elif endpoint == "collection":
                 self._json(workspace.collection(self._one_value(query, "id")))
             elif endpoint == "project":
@@ -463,6 +540,16 @@ class SimjectureRequestHandler(BaseHTTPRequestHandler):
             workspace = self.server.application.workspaces.open(space)
             if endpoint == "workspaces":
                 result = self.server.application.workspaces.create(payload)
+            elif endpoint == "knowledge-source":
+                result = workspace.knowledge.add(payload)
+            elif endpoint == "knowledge-configure":
+                result = workspace.knowledge.configure(payload)
+            elif endpoint == "knowledge-refresh":
+                result = workspace.knowledge.refresh()
+            elif endpoint == "knowledge-selection":
+                result = workspace.knowledge.set_selection(
+                    payload.get("project"), payload.get("sources")
+                )
             elif endpoint == "collections":
                 result = workspace.save_collection(payload)
             elif endpoint == "assign-collection":

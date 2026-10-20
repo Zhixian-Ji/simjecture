@@ -720,6 +720,34 @@ def agent_tools(root, deadline, project=None, workspace=None):
             simulation_status,
             progress_update,
         ]
+
+        @tool
+        def knowledge_search(query: str, kind: str = "all") -> str:
+            """Search this conversation's connected local research sources.
+
+            Args:
+                query: Keywords, scientific terms, code identifiers or a research question.
+                kind: all, code, papers, slides, documents, conversations, or studies.
+            """
+            result = workspace.knowledge.search(query, kind=kind, conversation=project, limit=12)
+            return json.dumps(result, ensure_ascii=False)
+
+        @tool
+        def knowledge_read(id: str, revision: str = "", chunk: int = 0) -> str:
+            """Read a source section and preserve its exact revision as context.
+
+            Args:
+                id: Document ID returned by knowledge_search.
+                revision: Revision returned by search; empty selects the indexed current version.
+                chunk: Section number returned by search; follow chunks to read more.
+            """
+            result = workspace.knowledge.read(
+                id, revision=revision or None, chunk=chunk, conversation=project
+            )
+            workspace.knowledge.receipt(project, result)
+            return json.dumps(result, ensure_ascii=False)
+
+        tools += [knowledge_search, knowledge_read]
     return tools
 
 

@@ -124,6 +124,15 @@ class Workspace(MachineWorkspace, ProjectCollections):
         self.projects_root = self.root.parent / "projects"
 
     @cached_property
+    def knowledge(self):
+        from ..knowledge import Knowledge
+
+        return Knowledge(self)
+
+    def sync_knowledge(self):
+        self.knowledge.sync()
+
+    @cached_property
     def execution(self):
         from ..execution import select_execution_backend
 
@@ -603,6 +612,7 @@ class Workspace(MachineWorkspace, ProjectCollections):
                 if alive(load(path).get("worker_identity")):
                     raise ValueError("Wait for active study experiments to stop before deleting")
             shutil.rmtree(directory)
+            self.knowledge.forget_conversation(identifier)
             # Frozen per-turn/study connections belong to this conversation only.
             for folder in ("turn-connections", "connections"):
                 for path in (self.root / folder).glob(f"{identifier}-*.json"):
@@ -618,6 +628,9 @@ class Workspace(MachineWorkspace, ProjectCollections):
             raise ValueError("Supply a project ID or null")
         if collection:
             self.collection_path(collection)
+        knowledge_sources = payload.get("knowledge_sources")
+        if knowledge_sources is not None:
+            self.knowledge.allowed(knowledge_sources)
         agent = (
             self.select_agent(None, payload["agent"])
             if payload.get("agent")
@@ -644,6 +657,7 @@ class Workspace(MachineWorkspace, ProjectCollections):
                     brief=None,
                     agent=agent,
                     collection=collection or None,
+                    knowledge_sources=knowledge_sources,
                 ),
             )
             self.write_index(directory)
@@ -1031,6 +1045,13 @@ class Workspace(MachineWorkspace, ProjectCollections):
                     turn=turn.name,
                     agent=request.get("agent"),
                     activity=activity,
+                    knowledge_citations=[
+                        {k: item.get(k) for k in ("title", "location", "url", "revision")}
+                        for path in sorted((turn / "knowledge-context").glob("*.json"))[:32]
+                        if not path.is_symlink()
+                        for item in [load(path)]
+                        if item.get("url")
+                    ],
                     last_activity_at=last_activity,
                     progress=progress,
                     monitored_runs=sum(
@@ -1162,6 +1183,18 @@ class Workspace(MachineWorkspace, ProjectCollections):
                 raise ValueError(
                     "The agent is already working; stop it before sending another request"
                 )
+            references = payload.get("knowledge_refs", [])
+            if not isinstance(references, list) or len(references) > 8:
+                raise ValueError("Choose at most eight knowledge passages")
+            for item in references:
+                if not isinstance(item, dict) or "id" not in item:
+                    raise ValueError("Invalid knowledge reference")
+                self.knowledge.read(
+                    item["id"],
+                    revision=item.get("revision"),
+                    chunk=item.get("chunk", 0),
+                    conversation=identifier,
+                )
             turn = directory / "turns" / f"{time.time_ns()}"
             turn.mkdir()
             put(
@@ -1171,6 +1204,7 @@ class Workspace(MachineWorkspace, ProjectCollections):
                     agent=project["agent"],
                     created_at=time.time(),
                     report_campaign=report_campaign,
+                    knowledge_refs=references,
                 ),
             )
             connection = self.root / "turn-connections" / f"{identifier}-{turn.name}.json"
@@ -1220,6 +1254,15 @@ class Workspace(MachineWorkspace, ProjectCollections):
             context_path = turn / "project-context"
             context = self.freeze_context(identifier, context_path)
             prompt += self.context_prompt(context, str(context_path))
+            if not getattr(self, "hosted", False):
+                prompt += self.knowledge.agent_context(identifier)
+                selected = self.knowledge.context(
+                    identifier, references, turn / "knowledge-context"
+                )
+                if selected:
+                    prompt += "\nUSER-SELECTED REFERENCE PASSAGES (context only):\n" + json.dumps(
+                        selected, ensure_ascii=False
+                    )
             if not context and continuing and project.get("previous_collection"):
                 prompt += (
                     "\nThis conversation currently has no shared project. "
@@ -1601,10 +1644,7 @@ class Workspace(MachineWorkspace, ProjectCollections):
             prior = project.get("brief") or project.get("continuation_draft") or {}
             if "capability_directory" not in payload:
                 brief["capability_directory"] = prior.get("capability_directory", "auto")
-            if (
-                not instrument and prior.get("instrument")
-                and brief["capability_directory"]
-            ):
+            if not instrument and prior.get("instrument") and brief["capability_directory"]:
                 brief["instrument"] = prior["instrument"]
             if payload.get("inherited_files") is not None:
                 from ..research_continuation import selected_file
@@ -2090,6 +2130,15 @@ class Workspace(MachineWorkspace, ProjectCollections):
             try:
                 context = self.freeze_context(identifier, context_staging)
                 instruction += self.context_prompt(context, "project_context/context.json")
+                knowledge_references = self.knowledge.freeze_references(
+                    identifier, context_staging / "knowledge"
+                )
+                if knowledge_references:
+                    instruction += (
+                        "\nPreparation used knowledge passages preserved in "
+                        "project_context/knowledge/references.json. Read them as context; "
+                        "retain their source versions and evidence limitations."
+                    )
                 request = NativeStudyRequest(
                     hypothesis=brief["question"],
                     instruction=instruction,
@@ -2121,7 +2170,7 @@ class Workspace(MachineWorkspace, ProjectCollections):
                     machine_ids=brief.get("machine_ids", []),
                 )
                 plan = materialize_native(request)
-                if context:
+                if context or knowledge_references:
                     shutil.move(str(context_staging), root / "research" / "project_context")
             finally:
                 if context_staging.exists():

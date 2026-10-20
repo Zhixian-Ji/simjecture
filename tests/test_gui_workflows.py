@@ -88,6 +88,43 @@ const api = async () => {throw Error('Offline');};
     )
 
 
+def test_send_keeps_references_attached_to_the_original_message():
+    run_js(
+        """
+const assert = require('node:assert/strict');
+const input = {value:'Original message'};
+const $ = () => input;
+const state = {project:{id:'original'}};
+const original = {id:'first',revision:'v1',chunk:0};
+const next = {id:'second',revision:'v2',chunk:1};
+let references = [original], sent, cleared;
+globalThis.WorkspaceKnowledge = {
+  references: project => {assert.equal(project,'original');return references;},
+  clear: (project, items) => {cleared={project,items};},
+};
+const saveConversationAgent = async () => {
+  references = [next]; input.value = 'Next message';
+};
+const api = async (path, payload) => {
+  if (path === 'message') {sent=payload; return {};}
+  return {id:'original'};
+};
+const renderProject = () => {};
+const reloadProjects = async () => {};
+"""
+        + function_source("send", "assistInstallation")
+        + """
+(async () => {
+  await send();
+  assert.deepEqual(sent, {project:'original',message:'Original message',knowledge_refs:[original]});
+  assert.deepEqual(cleared, {project:'original',items:[original]});
+  assert.deepEqual(references, [next]);
+  assert.equal(input.value,'Next message');
+})().catch(e => {console.error(e);process.exitCode=1;});
+"""
+    )
+
+
 @pytest.mark.parametrize(
     "saved,expected", [(None, "dark"), ("invalid", "dark"), ("light", "light")]
 )

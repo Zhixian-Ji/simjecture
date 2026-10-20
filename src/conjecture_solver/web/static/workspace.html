@@ -17,6 +17,7 @@
     <link rel="stylesheet" href="/assets/account-rail.css" />
     <link rel="stylesheet" href="/assets/workspace-composer.css" />
     <link rel="stylesheet" href="/assets/workspace-projects.css" />
+    <link rel="stylesheet" href="/assets/workspace-knowledge.css" />
     <link rel="stylesheet" href="/assets/interface.css" />
     <script type="module" src="/assets/workspace-components.js"></script>
     <script src="/assets/vendor/marked-18.0.10.umd.js" defer></script>
@@ -26,6 +27,7 @@
     <script src="/assets/markdown.js" defer></script>
     <script src="/assets/vendor/highlight-11.11.1.min.js" defer></script>
     <script src="/assets/workspace-projects.js" defer></script>
+    <script src="/assets/workspace-knowledge.js" defer></script>
     <script src="/assets/workspace-rich.js" defer></script>
     <script src="/assets/workspace-monitor.js" defer></script>
     <script src="/assets/workspace-benchmarks.js" defer></script>
@@ -70,6 +72,9 @@
         <nav aria-label="Workspace navigation">
           <button data-view="home" class="nav-item active" aria-current="page">
             <span aria-hidden="true">⌂</span> Overview
+          </button>
+          <button id="knowledge-nav" data-view="knowledge" class="nav-item" hidden>
+            <span aria-hidden="true">▤</span> Knowledge
           </button>
           <details class="workspace-resources" open><summary>Resources <span aria-hidden="true">⌄</span></summary>
           <button data-view="tools" class="nav-item">
@@ -166,6 +171,48 @@
         <span aria-hidden="true">›</span>
       </button>
       <main id="main-content" tabindex="-1">
+        <section id="view-knowledge" class="view knowledge-view" hidden aria-labelledby="knowledge-title">
+          <header class="knowledge-heading">
+            <div><p class="eyebrow">YOUR RESEARCH LIBRARY</p><h1 id="knowledge-title">Knowledge</h1><p class="knowledge-subtitle">Find the work behind your next idea.</p></div>
+            <button id="knowledge-connect" class="primary" type="button">＋ Connect folder</button>
+          </header>
+          <nav class="knowledge-tabs" aria-label="Knowledge sections">
+            <button type="button" data-knowledge-tab="search" aria-current="page">Search</button>
+            <button type="button" data-knowledge-tab="sources">Sources <span id="knowledge-source-count"></span></button>
+            <button type="button" data-knowledge-tab="access">Agent access</button>
+          </nav>
+          <p id="knowledge-error" role="alert" hidden></p>
+          <div id="knowledge-search-panel">
+            <form id="knowledge-search-form" class="knowledge-search-form" role="search">
+              <span aria-hidden="true">⌕</span><label class="sr-only" for="knowledge-query">Search your research</label>
+              <input id="knowledge-query" type="search" maxlength="1000" placeholder="Search a method, paper, example or past decision…" autocomplete="off" />
+              <button class="primary" type="submit">Search</button>
+            </form>
+            <div class="knowledge-filters">
+              <div id="knowledge-kinds" role="group" aria-label="Filter by content type"></div>
+              <label class="sr-only" for="knowledge-source-filter">Filter by source</label><select id="knowledge-source-filter"><option value="">All connected sources</option></select>
+            </div>
+            <div class="knowledge-results-bar"><p id="knowledge-results-summary" role="status">Loading your library…</p><span>Files stay on your machine</span></div>
+            <div class="knowledge-columns">
+              <div id="knowledge-results" class="knowledge-results"></div>
+              <aside id="knowledge-preview" class="knowledge-preview" aria-label="Source preview">
+                <div class="knowledge-preview-empty"><span aria-hidden="true">▤</span><h2>Follow an idea to its source</h2><p>Select a result to read the passage, check its version, and bring it into a conversation.</p></div>
+              </aside>
+            </div>
+          </div>
+          <div id="knowledge-sources-panel" hidden>
+            <div class="knowledge-section-intro"><div><h2>Connected sources</h2><p>Folders refresh every minute while Simjecture is running. Conversations appear after a turn finishes.</p></div><button id="knowledge-refresh" class="secondary" type="button">Refresh now</button></div>
+            <div id="knowledge-sources"></div>
+            <p class="field-help">Indexes text, code, PDF, PPTX, DOCX and notebooks. Hidden folders, dependencies, build caches and large binary outputs are skipped. Scanned PDFs need a text layer; figures are available in the original file.</p>
+          </div>
+          <div id="knowledge-access-panel" class="knowledge-access" hidden>
+            <h2>One library for your agents</h2><p>Connect an external agent to this workspace's enabled sources. These tools can search and read; they cannot change your files or start research.</p>
+            <div class="knowledge-access-heading"><h3>MCP configuration</h3><button id="knowledge-copy-mcp" class="quiet" type="button">Copy configuration</button></div>
+            <pre id="knowledge-mcp-config"></pre>
+            <h3>Search from a terminal</h3><pre id="knowledge-cli"></pre>
+            <p class="field-help">Run these commands on the machine that owns the folders. The browser server refreshes the index; when it is closed, refresh with:</p><pre id="knowledge-sync-cli"></pre>
+          </div>
+        </section>
         <section id="view-collection" class="view collection-view" hidden>
           <div class="collection-heading"><div><p class="eyebrow">PROJECT</p><h1 id="collection-title"></h1><p id="collection-description" class="lead"></p></div><button id="edit-collection" class="quiet" type="button">Project settings</button></div>
           <button id="collection-new-chat" class="primary" type="button">＋ New conversation</button>
@@ -199,6 +246,7 @@
               <button type="submit" class="primary composer-send" aria-label="Send request" title="Send request"><span aria-hidden="true">↑</span></button>
             </div>
           </form>
+          <div id="home-knowledge" class="knowledge-composer-context" hidden><button id="home-knowledge-picker" class="knowledge-context-button" type="button">▤ Knowledge sources</button><div id="home-knowledge-refs" class="knowledge-reference-chips"></div></div>
           <p id="first-request-help" class="field-help composer-help">Enter to send · Shift + Enter for a new line. Choose your agent from the model menu.</p>
           <div class="section-line">
             <h2>A place to start</h2>
@@ -529,6 +577,7 @@
             <div class="conversation-column" slot="start">
               <div id="interactive-panel">
                 <div id="messages" class="messages" aria-live="polite"></div>
+                <div id="conversation-knowledge" class="knowledge-composer-context" hidden><button id="conversation-knowledge-picker" class="knowledge-context-button" type="button">▤ Knowledge sources</button><div id="conversation-knowledge-refs" class="knowledge-reference-chips"></div></div>
                 <form id="chat-form" class="composer prompt-composer has-attachments">
                   <label class="sr-only" for="chat-input"
                     >Message your research agent</label
@@ -912,6 +961,23 @@
       <p id="machine-label">Connecting to workspace…</p>
       <p id="connection-indicator" class="connection-dot">Connecting…</p>
       <div class="workspace-detail-links"><a href="/monitor">Experiment monitor ↗</a><a href="https://github.com/tomzhu0225/simjecture" target="_blank" rel="noopener noreferrer">Simjecture on GitHub ↗</a></div>
+    </dialog>
+    <dialog id="knowledge-folder-dialog" class="organization-dialog" aria-labelledby="knowledge-folder-title">
+      <div class="dialog-heading"><h2 id="knowledge-folder-title">Connect a research folder</h2><button id="knowledge-folder-close" type="button" aria-label="Close folder dialog">×</button></div>
+      <p class="field-help">Choose a folder on the machine running Simjecture. Its supported files will be searchable in this workspace.</p>
+      <form id="knowledge-folder-form">
+        <label for="knowledge-folder-path">Folder path</label><input id="knowledge-folder-path" placeholder="/home/you/research" required />
+        <label for="knowledge-folder-name">Display name <span class="muted">(optional)</span></label><input id="knowledge-folder-name" maxlength="160" placeholder="Simulation examples" />
+        <label for="knowledge-folder-excludes">Exclude paths <span class="muted">(optional, one pattern per line)</span></label><textarea id="knowledge-folder-excludes" rows="3" placeholder="archive/*&#10;**/outputs/*"></textarea>
+        <p id="knowledge-folder-error" class="field-help" role="alert"></p><button class="primary" type="submit">Connect folder</button>
+      </form>
+    </dialog>
+    <dialog id="knowledge-selection-dialog" class="organization-dialog" aria-labelledby="knowledge-selection-title">
+      <div class="dialog-heading"><h2 id="knowledge-selection-title">Knowledge sources</h2><button id="knowledge-selection-close" type="button" aria-label="Close source selection">×</button></div>
+      <p class="field-help">Choose where this conversation's agent can search.</p>
+      <label class="knowledge-source-choice"><input id="knowledge-inherit" type="checkbox" checked /> Use all enabled workspace sources</label>
+      <div id="knowledge-selection-list"></div><p id="knowledge-selection-error" class="field-help" role="alert"></p>
+      <button id="knowledge-save-selection" class="primary" type="button">Apply to conversation</button>
     </dialog>
   </body>
 </html>

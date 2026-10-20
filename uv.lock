@@ -2147,6 +2147,15 @@ wheels = [
 ]
 
 [[package]]
+name = "pypdf"
+version = "6.21.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/51/e1/32a9c4dbd94618145f8bab5c623bdb0a528f23fc8719afd77ba0278fd377/pypdf-6.21.1.tar.gz", hash = "sha256:2d62c383acd6e0dff0a96322ba8b1135229343b084d73c6f6cfd947fd291afcb", size = 7088597, upload-time = "2026-10-17T10:29:52.801Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/85/e6/24c944e473c34e818cf1b98085796fcd780465ecfe17663f2bf8fee1958b/pypdf-6.21.1-py3-none-any.whl", hash = "sha256:553e2d42f5bb3bb2a785a7d3de8ef90bb7df74b5413eff5a7b4388007ea9254b", size = 405134, upload-time = "2026-10-17T10:29:50.687Z" },
+]
+
+[[package]]
 name = "pytest"
 version = "8.4.2"
 source = { registry = "https://pypi.org/simple" }
@@ -2652,6 +2661,10 @@ dsh = [
 flash-demo = [
     { name = "h5py" },
 ]
+knowledge = [
+    { name = "mcp" },
+    { name = "pypdf" },
+]
 process = [
     { name = "psutil" },
 ]
@@ -2667,7 +2680,9 @@ tui = [
 ]
 workspace = [
     { name = "h5py" },
+    { name = "mcp" },
     { name = "psutil" },
+    { name = "pypdf" },
     { name = "smolagents", extra = ["openai"] },
 ]
 
@@ -2698,6 +2713,8 @@ requires-dist = [
     { name = "httpx", specifier = ">=0.27,<1" },
     { name = "matplotlib", specifier = ">=3.8,<4" },
     { name = "mcp", marker = "extra == 'dsh'", specifier = ">=2,<3" },
+    { name = "mcp", marker = "extra == 'knowledge'", specifier = ">=2,<3" },
+    { name = "mcp", marker = "extra == 'workspace'", specifier = ">=2,<3" },
     { name = "numpy", specifier = ">=1.26,<3" },
     { name = "pandas", specifier = ">=2.2,<4" },
     { name = "pillow", specifier = ">=10,<13" },
@@ -2705,13 +2722,15 @@ requires-dist = [
     { name = "psutil", marker = "extra == 'public'", specifier = ">=6,<8" },
     { name = "psutil", marker = "extra == 'workspace'", specifier = ">=6,<8" },
     { name = "pydantic", specifier = ">=2.9,<3" },
+    { name = "pypdf", marker = "extra == 'knowledge'", specifier = ">=6,<7" },
+    { name = "pypdf", marker = "extra == 'workspace'", specifier = ">=6,<7" },
     { name = "scipy", specifier = ">=1.12,<2" },
     { name = "smolagents", extras = ["openai"], marker = "extra == 'public'", specifier = ">=1.24,<2" },
     { name = "smolagents", extras = ["openai"], marker = "extra == 'workspace'", specifier = ">=1.24,<2" },
     { name = "textual", marker = "extra == 'tui'", specifier = ">=2.0,<9" },
     { name = "uvicorn", marker = "extra == 'public'", specifier = ">=0.30,<1" },
 ]
-provides-extras = ["process", "tui", "dsh", "flash-demo", "workspace", "public"]
+provides-extras = ["process", "tui", "dsh", "flash-demo", "workspace", "public", "knowledge"]
 
 [package.metadata.requires-dev]
 browser = [{ name = "playwright", specifier = ">=1.50,<2" }]

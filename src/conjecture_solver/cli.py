@@ -734,7 +734,12 @@ def build_parser() -> argparse.ArgumentParser:
         )
     )
 
+    from .knowledge_cli import configure as configure_knowledge
     from .workspace_cli import configure as configure_workspace
+
+    configure_knowledge(
+        subcommands.add_parser("knowledge", help="Search and connect local research knowledge")
+    )
 
     for kind in ("workspace", "project", "conversation"):
         configure_workspace(
