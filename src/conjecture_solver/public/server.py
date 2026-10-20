@@ -506,7 +506,11 @@ def create_app(root, *, dispatch=True, secure_cookies=True):
         row = visitor(request)
         try:
             query = dict(request.query_params)
+            from .organization import Organization
+
+            organization = Organization(store, row["id"], query.get("workspace", "personal"))
             if name in {"file", "preview", "simulation-file"}:
+                organization.conversation(query.get("id"))
                 p = workspace.require_project(query.get("id"), row["id"])
                 if name == "simulation-file":
                     job_id, _, exp_id = query.get("simulation", "").partition(".")
@@ -534,7 +538,9 @@ def create_app(root, *, dispatch=True, secure_cookies=True):
         if name in {"message", "prepare", "launch", "explain-study"} and not ready():
             raise HTTPException(503, "The shared agent connection is unavailable")
         try:
-            return workspace.post(name, payload, row["id"])
+            return workspace.post(
+                name, payload, row["id"], request.query_params.get("workspace", "personal")
+            )
         except PermissionError as error:
             raise HTTPException(403, str(error)) from None
         except LookupError as error:

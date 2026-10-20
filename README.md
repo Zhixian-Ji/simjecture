@@ -36,7 +36,7 @@ claim. New browser studies default to answer; the CLI defaults to repair. Both u
 the minimal workflow: flexible agent strategy, recorded experiments and explicit
 scientific acceptance. A deadline can leave the question unresolved.
 
-The next release removes classical/MVP, DSH, structured and frontier launch routes.
+Version 0.6.3 removes classical/MVP, DSH, structured and frontier launch routes.
 Existing records remain readable. See the [migration guide](docs/how-to/minimal-migration.md)
 for new launches and handling older runs.
 

@@ -101,8 +101,14 @@ class Store(Identities):
                     "privileged": "INTEGER NOT NULL DEFAULT 0",
                     "study_brief": "TEXT",
                     "deleted": "INTEGER NOT NULL DEFAULT 0",
+                    "reference_context": "TEXT",
                 },
-                "projects": {"deleting": "INTEGER NOT NULL DEFAULT 0"},
+                "projects": {
+                    "deleting": "INTEGER NOT NULL DEFAULT 0",
+                    "workspace": "TEXT NOT NULL DEFAULT 'personal'",
+                    "collection": "TEXT",
+                    "knowledge_sources": "TEXT",
+                },
             }
             for table, additions in migrations.items():
                 columns = {row[1] for row in db.execute(f"PRAGMA table_info({table})")}
@@ -119,6 +125,36 @@ class Store(Identities):
                 "visitor TEXT NOT NULL REFERENCES visitors(id), expires REAL NOT NULL,"
                 "PRIMARY KEY(id,visitor))"
             )
+            db.executescript("""
+                CREATE TABLE IF NOT EXISTS hosted_workspaces(
+                    tenant TEXT NOT NULL REFERENCES accounts(id), id TEXT NOT NULL,
+                    name TEXT NOT NULL, created REAL NOT NULL, knowledge_enabled INTEGER DEFAULT 1,
+                    PRIMARY KEY(tenant,id));
+                CREATE TABLE IF NOT EXISTS hosted_collections(
+                    id TEXT PRIMARY KEY, tenant TEXT NOT NULL, workspace TEXT NOT NULL,
+                    name TEXT NOT NULL, description TEXT NOT NULL, instructions TEXT NOT NULL,
+                    created REAL NOT NULL,
+                    FOREIGN KEY(tenant,workspace) REFERENCES hosted_workspaces(tenant,id));
+                CREATE TABLE IF NOT EXISTS knowledge_passages(
+                    id INTEGER PRIMARY KEY, document TEXT NOT NULL,
+                    project TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                    message INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+                    revision TEXT NOT NULL, ordinal INTEGER NOT NULL, title TEXT NOT NULL,
+                    body TEXT NOT NULL, created REAL NOT NULL, indexed REAL NOT NULL,
+                    UNIQUE(document,ordinal));
+                CREATE INDEX IF NOT EXISTS knowledge_project ON knowledge_passages(project,message);
+                CREATE VIRTUAL TABLE IF NOT EXISTS hosted_search
+                    USING fts5(title,body,content='knowledge_passages',content_rowid='id');
+                CREATE TRIGGER IF NOT EXISTS knowledge_insert AFTER INSERT ON knowledge_passages
+                BEGIN
+                    INSERT INTO hosted_search(rowid,title,body) VALUES(new.id,new.title,new.body);
+                END;
+                CREATE TRIGGER IF NOT EXISTS knowledge_delete AFTER DELETE ON knowledge_passages
+                BEGIN
+                    INSERT INTO hosted_search(hosted_search,rowid,title,body)
+                    VALUES('delete',old.id,old.title,old.body);
+                END;
+            """)
         self.path.chmod(0o600)
 
     @contextmanager
@@ -221,6 +257,7 @@ class Store(Identities):
         action=None,
         privileged=False,
         study_brief=None,
+        reference_context=None,
     ):
         if not self.capacity_available():
             raise CapacityUnavailable("Trial storage is temporarily full")
@@ -275,8 +312,8 @@ class Store(Identities):
                 raise LimitReached("The trial queue is full; please return later")
             db.execute(
                 "INSERT INTO jobs(id,owner,mode,hypothesis,status,created,wall_seconds"
-                ",project,quota_key,action,privileged,study_brief) "
-                "VALUES(?,?,?,?,'queued',?,?,?,?,?,?,?)",
+                ",project,quota_key,action,privileged,study_brief,reference_context) "
+                "VALUES(?,?,?,?,'queued',?,?,?,?,?,?,?,?)",
                 (
                     identifier,
                     owner,
@@ -289,6 +326,7 @@ class Store(Identities):
                     action,
                     int(privileged),
                     json.dumps(study_brief, allow_nan=False) if study_brief else None,
+                    json.dumps(reference_context, allow_nan=False) if reference_context else None,
                 ),
             )
             if project and mode == "interactive":
@@ -322,6 +360,9 @@ class Store(Identities):
             ).fetchone()
             job["usage"] = dict(usage)
             job["study_brief"] = json.loads(job["study_brief"]) if job["study_brief"] else None
+            job["reference_context"] = (
+                json.loads(job["reference_context"]) if job["reference_context"] else None
+            )
         return job
 
     def jobs(self, owner):

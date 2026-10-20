@@ -69,6 +69,9 @@ class HostedWorkspace:
                 "general_execution": bool(self.settings().get("executor_qualified")),
                 "native_commands": False,
                 "solver_development": False,
+                "organize_projects": bool(self.store.account(owner)),
+                "knowledge": bool(self.store.account(owner)),
+                "project_files": False,
             },
         }
 
@@ -190,6 +193,7 @@ class HostedWorkspace:
                 "agent": self.agent(),
                 "steps": [],
                 "files": [],
+                "knowledge_citations": self.citations(m["job"], p["jobs"]),
             }
             for m in p["messages"]
         ]
@@ -244,6 +248,11 @@ class HostedWorkspace:
             "id": p["id"],
             "name": p["name"],
             "created_at": p["created"],
+            "workspace": p["workspace"],
+            "collection": p["collection"],
+            "knowledge_sources": (
+                json.loads(p["knowledge_sources"]) if p["knowledge_sources"] else None
+            ),
             "agent": self.agent(),
             "messages": messages,
             "studies": studies,
@@ -256,6 +265,23 @@ class HostedWorkspace:
             "simulations": [r for j in p["jobs"] for r in self.simulations(j)],
             "hosting": self.hosting(owner),
         }
+
+    def citations(self, identifier, jobs):
+        job = next((item for item in jobs if item["id"] == identifier), None)
+        if not job:
+            return []
+        references = (job.get("reference_context") or {}).get("knowledge", [])
+        references = references + [
+            event for event in self.store.events(identifier) if event["kind"] == "knowledge_read"
+        ]
+        found = {}
+        for reference in references:
+            key = (
+                reference.get("document", reference.get("id")),
+                reference["revision"], reference["chunk"],
+            )
+            found[key] = {k: reference[k] for k in ("title", "url", "location")}
+        return list(found.values())
 
     def files_root(self, identifier):
         root = self.store.root / "projects" / identifier / "files"
@@ -284,9 +310,12 @@ class HostedWorkspace:
             raise LookupError("Project file not found")
         return path
 
-    def bootstrap(self, owner, csrf):
-        projects = self.store.projects(owner)
-        if not projects:
+    def bootstrap(self, owner, csrf, space="personal"):
+        from .organization import Organization
+
+        organization = Organization(self.store, owner, space)
+        projects = [p for p in self.store.projects(owner) if p["workspace"] == space]
+        if not projects and space == "personal":
             legacy = [j for j in self.store.jobs(owner) if not j.get("project")]
             if legacy:
                 p = self.store.create_project(owner, "Earlier investigations")
@@ -297,11 +326,20 @@ class HostedWorkspace:
                     j["project"] = p["id"]
                     if j["status"] in TERMINAL:
                         self.store.finish_project_job(j, j["summary"])
-                projects = self.store.projects(owner)
+                projects = [p for p in self.store.projects(owner) if p["workspace"] == space]
         return {
             "control_token": csrf,
             "allow_mutations": True,
             "hosting": self.hosting(owner),
+            "knowledge_available": bool(organization.account),
+            "knowledge_capabilities": {
+                "connect_folders": False, "external_access": False,
+                "kinds": ["all", "conversations"],
+            },
+            **({
+                "workspaces": organization.spaces(), "workspace": space,
+                "collections": organization.collections(),
+            } if organization.account else {}),
             "settings": {
                 "default_agent": self.agent(),
                 "api_configured": True,
@@ -318,6 +356,11 @@ class HostedWorkspace:
                     "name": p["name"],
                     "running": any(j["status"] in {"queued", "running"} for j in p["jobs"]),
                     "agent": self.agent(),
+                    "collection": p["collection"],
+                    "created_at": p["created"],
+                    "studies": [
+                        {"campaign": j["id"]} for j in p["jobs"] if j["mode"] == "research"
+                    ],
                 }
                 for p in projects
             ],
@@ -396,8 +439,18 @@ class HostedWorkspace:
                 )
         return tools
 
-    def enqueue(self, owner, mode, text, project, action=None):
+    def enqueue(self, owner, mode, text, project, action=None, references=None):
         p = self.require_project(project, owner)
+        from .organization import Organization
+
+        organization = Organization(self.store, owner, p["workspace"])
+        context = {"project": organization.context(p), "knowledge": []}
+        if references:
+            from .knowledge import HostedKnowledge
+
+            context["knowledge"] = HostedKnowledge(
+                self.store, owner, p["workspace"]
+            ).references(project, references)
         if any(j["status"] in {"queued", "running"} for j in p["jobs"]):
             raise ValueError("Wait for your current task or stop it first")
         settings = self.settings()
@@ -427,6 +480,7 @@ class HostedWorkspace:
             else min(settings.get("wall_seconds", 600), requested),
             privileged=owner_tier,
             study_brief=p.get("brief") if mode == "research" else None,
+            reference_context=context if context["project"] or context["knowledge"] else None,
         )
 
     def brief(self, p, values):
@@ -479,10 +533,32 @@ class HostedWorkspace:
         return brief
 
     def get(self, name, query, owner, csrf):
+        from .organization import Organization
+
+        space = query.get("workspace", "personal")
+        organization = Organization(self.store, owner, space)
         identifier = query.get("id", "")
         if name == "bootstrap":
-            return self.bootstrap(owner, csrf)
+            return self.bootstrap(owner, csrf, space)
+        if name.startswith("knowledge-"):
+            from .knowledge import HostedKnowledge
+
+            library = HostedKnowledge(self.store, owner, space)
+            if name == "knowledge-status":
+                return library.status()
+            if name == "knowledge-search":
+                return library.search(
+                    query.get("q", ""), kind=query.get("kind", "all"), source=query.get("source"),
+                    conversation=query.get("project"),
+                )
+            if name == "knowledge-read":
+                return library.read(
+                    identifier, revision=query.get("revision"), chunk=query.get("chunk", 0),
+                    conversation=query.get("project"),
+                )
+            raise PermissionError("Hosted knowledge uses saved conversations only")
         if name == "project":
+            organization.conversation(identifier)
             return self.project(identifier, owner)
         if name == "tools":
             return self.tools()
@@ -507,6 +583,7 @@ class HostedWorkspace:
         if name == "machines":
             return {"machines": [], "local_defaults": {}, "enabled": False}
         if name == "simulation":
+            organization.conversation(identifier)
             p = self.project(identifier, owner)
             row = next((r for r in p["simulations"] if r["id"] == query.get("simulation")), None)
             if not row:
@@ -516,7 +593,33 @@ class HostedWorkspace:
             return self.study(identifier, owner)
         raise PermissionError("This operation is managed by the host")
 
-    def post(self, name, values, owner):
+    def post(self, name, values, owner, space="personal"):
+        from .organization import Organization
+
+        organization = Organization(self.store, owner, space)
+        if name == "workspaces":
+            return organization.create_workspace(values)
+        if name == "collections":
+            return organization.save_collection(values)
+        if name == "assign-collection":
+            if set(values) != {"project", "collection"}:
+                raise ValueError("Choose a conversation and project")
+            organization.assign(values["project"], values["collection"])
+            return self.project(values["project"], owner)
+        if name.startswith("knowledge-"):
+            from .knowledge import HostedKnowledge
+
+            library = HostedKnowledge(self.store, owner, space)
+            if name == "knowledge-refresh" and not values:
+                library.sync()
+                return library.status()
+            if name == "knowledge-configure":
+                return library.configure(values)
+            if name == "knowledge-selection" and set(values) == {"project", "sources"}:
+                return library.select(values["project"], values["sources"])
+            raise PermissionError("Hosted knowledge uses saved conversations only")
+        if values.get("project"):
+            organization.conversation(values["project"])
         if name == "delete-project":
             from .deletion import ProjectDeletion
 
@@ -571,7 +674,7 @@ class HostedWorkspace:
             entry = next((r for r in registry(self.store.root) if r["id"] == values["name"]), None)
             if not entry:
                 raise ValueError("This native example is not qualified")
-            p = self.store.create_project(owner, entry["name"])
+            p = self.store.create_project(owner, entry["name"], workspace=space)
             job = self.enqueue(
                 owner,
                 "reproduce",
@@ -593,15 +696,23 @@ class HostedWorkspace:
                 raise PermissionError("Model settings are managed by the host")
             return self.agent()
         if name == "projects":
-            if set(values) - {"name", "agent"}:
+            if set(values) - {"name", "agent", "collection", "knowledge_sources"}:
                 raise ValueError("Unsupported project field")
             name = values.get("name", "New investigation")
             if not isinstance(name, str) or not 1 <= len(name) <= 100:
                 raise ValueError("Choose a short project name")
-            p = self.store.create_project(owner, name)
+            selection = values.get("knowledge_sources")
+            if selection is not None:
+                from .knowledge import HostedKnowledge
+
+                HostedKnowledge(self.store, owner, space).allowed(selection=selection)
+            p = self.store.create_project(
+                owner, name, workspace=space, collection=values.get("collection"),
+                knowledge_sources=selection,
+            )
             return self.project(p["id"], owner)
         allowed = {
-            "message": {"project", "message"},
+            "message": {"project", "message", "knowledge_refs"},
             "stop": {"project"},
             "prepare": {"project", "approach"},
             "brief": {
@@ -639,7 +750,10 @@ class HostedWorkspace:
             message = values.get("message", "")
             if not isinstance(message, str) or not 1 <= len(message) <= 4000:
                 raise ValueError("Message must be 1–4000 characters")
-            j = self.enqueue(owner, "interactive", message, p["id"])
+            references = values.get("knowledge_refs", [])
+            if not isinstance(references, list):
+                raise ValueError("Knowledge references must be a list")
+            j = self.enqueue(owner, "interactive", message, p["id"], references=references)
             return {"id": j["id"], "message": "Your agent is queued"}
         if name == "brief":
             return self.brief(p, values)

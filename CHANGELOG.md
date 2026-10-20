@@ -4,6 +4,20 @@ This project follows semantic versioning. Dates use ISO 8601.
 
 ## Unreleased
 
+## 0.6.3 — 2026-10-20
+
+### Hosted research
+
+- Let signed-in visitors create private workspaces and projects, organize conversations,
+  and share project descriptions and instructions with the assigned agent. Existing
+  conversations stay in Personal, and the same account can access them across browsers.
+- Add a private hosted knowledge library over completed conversation turns. Search,
+  preview and attach exact passages, choose sources per conversation, and let the agent
+  retrieve earlier work. Enforce account/workspace scope on every search and read;
+  deleting a conversation removes its derived search entries. Guest retention and
+  usage limits are unchanged. Hosted visitors cannot connect server folders.
+
+
 ### Breaking changes
 
 - Minimal is the only supported autonomous study workflow. Remove classical/MVP,

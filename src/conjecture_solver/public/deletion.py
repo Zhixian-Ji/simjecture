@@ -105,6 +105,7 @@ class ProjectDeletion:
                 db.execute("DELETE FROM events WHERE job=?", (job,))
                 db.execute(
                     "UPDATE jobs SET hypothesis='',summary='',project=NULL,study_brief=NULL,"
+                    "reference_context=NULL,"
                     "action=NULL,pid=NULL,process_identity=NULL WHERE id=?",
                     (job,),
                 )

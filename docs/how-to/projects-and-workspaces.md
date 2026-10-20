@@ -177,9 +177,11 @@ same operating-system account.
 
 Local workspaces organise trusted research; they are not security boundaries
 between mutually untrusted companies or agents. Use separate installations and
-OS/container identities where that boundary is required. The hosted public trial
-keeps its existing account isolation and single-workspace interface; local
-workspace management is not exposed as a hosted tenant-management feature.
+OS/container identities where that boundary is required. The hosted service adds
+account-owned workspaces and projects with server-side ownership checks. Signed-in
+users can organize conversations and retrieve completed turns within each workspace;
+these are private to the account. Hosted shared project files are not enabled: upload
+scientific files in an individual conversation. See [hosted research](public-trials.md).
 
 Private device assets belong in these user-data locations or a private repository,
 not in a package example. The distributed examples and automated fixtures use
