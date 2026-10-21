@@ -59,6 +59,7 @@ def budget_status(root, *, manifest=None, experiments=None):
             deadline
             and deadline > now
             and state.get("status") not in TERMINAL
+            and not (root / "campaign_closeout.json").exists()
             and not manifest.get("hosted_runtime_policy", {}).get("unbounded")
         ),
         deadline=deadline,
@@ -115,7 +116,11 @@ def extend_budget(
                 return event
         now = time.time()
         state = _read(supervisor_directory(service.root) / "state.json")
-        if manifest["deadline"] <= now or state.get("status") in TERMINAL:
+        if (
+            service.campaign_closeout()
+            or manifest["deadline"] <= now
+            or state.get("status") in TERMINAL
+        ):
             raise ValueError("This study has ended; use Continue investigation with a new budget")
         if expected_deadline is not None and expected_deadline != manifest["deadline"]:
             raise ValueError(

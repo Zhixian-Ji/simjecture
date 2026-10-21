@@ -144,3 +144,20 @@ def test_finish_decision_cannot_cancel_jobs_or_request_more_work():
         DirectorVerdict(**base)
     with pytest.raises(ValueError, match="no other control action"):
         DirectorVerdict(**base, closeout_report="report_example", wake_worker=True)
+
+
+def test_new_guidance_and_extensions_cannot_cross_the_completion_barrier(tmp_path, monkeypatch):
+    from conjecture_solver.research_budget import budget_status, extend_budget
+    from conjecture_solver.research_continuation import submit
+
+    supervisor, report = prepared(tmp_path)
+    finish_response(supervisor, report, monkeypatch)
+    supervisor.run_director(force=True)
+    assert supervisor.service.campaign_closeout()
+    # The report publication barrier has not yet published terminal supervisor state.
+    assert supervisor.state["status"] != "completed"
+    assert not budget_status(supervisor.root)["can_extend"]
+    with pytest.raises(ValueError, match="ended"):
+        submit(supervisor.root, "New direction arriving after the closeout was committed")
+    with pytest.raises(ValueError, match="ended|finished|completed"):
+        extend_budget(supervisor.root, hours=1, key="late-extension")

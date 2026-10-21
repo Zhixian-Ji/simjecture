@@ -211,9 +211,12 @@ def submit(root, message, *, key=None):
     if not isinstance(key, (str, type(None))) or (key and len(key) > 120):
         raise ValueError("Invalid steering request identifier")
     with service.lock():
-        if time.time() >= service.manifest["deadline"] or read(
-            service.root / "supervisor/state.json"
-        ).get("status") in {"completed", "cancelled", "budget_exhausted"}:
+        if (
+            service.campaign_closeout()
+            or time.time() >= service.manifest["deadline"]
+            or read(service.root / "supervisor/state.json").get("status")
+            in {"completed", "cancelled", "budget_exhausted"}
+        ):
             raise ValueError("This study has ended; use Continue investigation with a new budget")
         for record in steering(root):
             if key and record.get("request_key") == key:
