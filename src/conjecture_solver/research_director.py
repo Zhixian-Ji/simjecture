@@ -25,7 +25,7 @@ class TimeRequest(BaseModel):
 
 class DirectorVerdict(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    decision: Literal["continue", "replan"]
+    decision: Literal["continue", "replan", "finish"]
     rationale: str = Field(min_length=16, max_length=3000)
     scientific_feasibility: Literal["adequate", "limited", "unknown"]
     budget_feasibility: Literal["feasible", "at_risk", "infeasible", "unknown"]
@@ -45,6 +45,11 @@ class DirectorVerdict(BaseModel):
         default=None,
         max_length=512,
         description="Report path for independent assessment now; never approves a claim.",
+    )
+    closeout_report: str | None = Field(
+        default=None,
+        max_length=128,
+        description="Accepted report request ID for decision=finish; never approves a claim.",
     )
     next_action: str = Field(min_length=16, max_length=2400)
     storage_increase: StorageIncrease | None = Field(
@@ -66,6 +71,24 @@ class DirectorVerdict(BaseModel):
 
     @model_validator(mode="after")
     def coherent(self):
+        if self.decision == "finish":
+            if not self.closeout_report or any(
+                (
+                    self.stop_experiments,
+                    self.wake_worker,
+                    self.park_worker,
+                    self.report_assessment,
+                    self.storage_increase,
+                    self.registration_tuning,
+                    self.time_request,
+                    self.operating_limits,
+                )
+            ):
+                raise ValueError(
+                    "Finish requires an accepted report ID and no other control action"
+                )
+        elif self.closeout_report is not None:
+            raise ValueError("A closeout report requires decision=finish")
         if self.decision == "continue" and self.stop_experiments:
             raise ValueError("Stopping an experiment requires decision=replan")
         if len(set(self.stop_experiments)) != len(self.stop_experiments):
@@ -259,6 +282,14 @@ The campaign clock, active experiments and supervision continue. A replan, expli
 wake-up or new operator guidance resumes the worker. Parking cannot accompany a replan
 or a wake-up. Validate a claimed API blocker against the actual error and allowed values;
 claim review accepts unresolved, while exploratory reports use report assessment.
+When no useful further work is planned, finish the investigation rather than parking
+merely to exhaust the wall budget. Use decision=finish and closeout_report=the accepted
+report request ID. Explain why no useful feasible next test remains in rationale.
+Finish requires no active jobs, pending reviews/replans or unconsidered operator guidance,
+and an unchanged accepted report covering the current scientific record. Do not finish
+while the worker is executing a turn. An unresolved hypothesis can be a finished
+investigation; this action never supports or falsifies a claim. Temporary waits for jobs,
+reviews or genuinely needed operator input remain park_worker, not finish.
 """
             + development_guidance(development_policy)
             + "\nSCHEMA:\n"
@@ -566,7 +597,7 @@ claim review accepts unresolved, while exploratory reports use report assessment
             verdict = validated.model_dump()
             # Compare before applying this decision's own report/cancellation actions.
             # Those host actions must not be mistaken for concurrent worker progress.
-            records_changed = verdict["park_worker"] and any(
+            records_changed = (verdict["park_worker"] or verdict["decision"] == "finish") and any(
                 {r["id"]: r.get("status") for r in self.service._all(kind)} != index
                 for kind, index in packet["record_index"].items()
             )
@@ -596,6 +627,15 @@ claim review accepts unresolved, while exploratory reports use report assessment
                 **verdict,
             )
             put(folder / (identifier + ".json"), record)
+            if verdict["decision"] == "finish":
+                if records_changed or getattr(self, "_worker_turn_active", False):
+                    raise ValueError("Finish at an idle handoff with unchanged worker records")
+                record["closeout_action"] = self.service.close_campaign(
+                    verdict["closeout_report"],
+                    reason=verdict["rationale"],
+                    director_decision=identifier,
+                )
+                put(folder / (identifier + ".json"), record)
             if verdict["operating_limits"] is not None:
                 record["operating_limits_action"] = configure_limits(
                     self.root,

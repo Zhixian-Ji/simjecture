@@ -8,6 +8,65 @@ import time
 
 
 class ReportService:
+    def campaign_closeout(self):
+        path = self.root / "campaign_closeout.json"
+        return json.loads(path.read_text()) if path.exists() else {}
+
+    def close_campaign(self, report, *, reason, director_decision):
+        """Finish an investigation without accepting or changing a scientific claim.
+
+        Host/director operation; deliberately absent from the worker's lab API.
+        The accepted report must describe the current retained scientific record.
+        """
+        from .research_continuation import steering
+        from .research_service import put, sha
+
+        if not isinstance(reason, str) or not 16 <= len(reason.strip()) <= 3000:
+            raise ValueError("Campaign closeout needs a concrete reason no useful work remains")
+        with self.lock():
+            existing = self.campaign_closeout()
+            if existing:
+                if existing["report_id"] != report:
+                    raise ValueError("Campaign already closed with another report")
+                return existing
+            decision = self._read("director", director_decision)
+            if decision.get("decision") != "finish" or decision.get("closeout_report") != report:
+                raise ValueError("Campaign closeout requires an explicit director finish decision")
+            if self.pending_director_replan():
+                raise ValueError("Resolve the pending director replan before finishing")
+            if any(not r.get("delivered_at") for r in steering(self.root)):
+                raise ValueError("New operator guidance must be considered before finishing")
+            for kind in ("experiments", "methods", "reviews", "report_requests"):
+                if any(r["status"] in {"queued", "running"} for r in self._all(kind)):
+                    raise ValueError(f"Cannot finish with pending {kind}")
+            assessment = self.report_assessment_status(report)
+            if (
+                assessment["status"] != "resolved"
+                or assessment.get("assessment", {}).get("decision") != "accepted"
+                or not assessment["current_report_unchanged"]
+            ):
+                raise ValueError("Finishing requires an accepted, unchanged report")
+            packet = json.loads((self.root / assessment["packet"]).read_text())
+            current = {
+                kind: [[p.stem, sha(p)] for p in sorted((self.root / kind).glob("*.json"))]
+                for kind in ("experiments", "methods", "reviews", "commitments")
+            }
+            if packet.get("record_identity", {}).get("records") != current:
+                raise ValueError("Scientific records changed since report assessment")
+            record = dict(
+                status="closed",
+                finished_at=time.time(),
+                reason=reason.strip(),
+                director_decision=director_decision,
+                report_id=report,
+                report=assessment["report"],
+                report_sha256=assessment["report_sha256"],
+                packet_sha256=assessment["packet_sha256"],
+                authority="Investigation finished; scientific dispositions remain unchanged",
+            )
+            put(self.root / "campaign_closeout.json", record)
+            return record
+
     def reconcile_report_assessments(self):
         """Recover a queued request already fulfilled by the bound final assessor."""
         from .research_finalization import ReportAssessment

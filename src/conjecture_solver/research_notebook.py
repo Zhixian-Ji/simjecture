@@ -233,6 +233,8 @@ class NotebookService:
             authority="Worker notes are unreviewed; only independent verdicts accept claims.",
             remaining_seconds=snapshot["remaining_seconds"],
             completed=snapshot["completed"],
+            original_disposition=snapshot["original_disposition"],
+            scientific_completed=snapshot["scientific_completed"],
             counts=dict(
                 experiments=len(experiments),
                 notes=len(notebook),
@@ -470,6 +472,8 @@ class NotebookService:
                 authority="Degraded recovery context; only independent verdicts accept claims.",
                 remaining_seconds=snapshot["remaining_seconds"],
                 completed=snapshot["completed"],
+                original_disposition=snapshot["original_disposition"],
+                scientific_completed=snapshot["scientific_completed"],
                 counts=dict(
                     experiments=len(experiments),
                     execution=dict(Counter(e["status"] for e in experiments)),

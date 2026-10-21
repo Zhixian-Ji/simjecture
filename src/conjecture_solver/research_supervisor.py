@@ -489,6 +489,11 @@ Write source normally here. All recorded numerical experiments use the existing 
     reason='Assess the bounded findings and the specific obstacle to judgment').
   This uses a separate independent report reviewer and never approves a claim or promotes
   exploratory results. It can run before the protected finalization period.
+  Lead the report with the scientific findings, quantitative comparisons and your reasoned
+  scientific judgement, distinguishing measured results, provisional interpretation and the
+  exact unresolved claim. Unresolved does not mean no findings or no scientific judgement.
+  Keep the current synthesis coherent; preserve repair history in the ledger or appendix
+  instead of accumulating contradictory phase notes in the opening summary.
   Call lab.wait('Await independent report feedback', reports=[r['id']]) and end this turn.
   Retrieve the result with lab.report_assessment_status(r['id']) after the host wakes you.
   lab.wait also accepts experiments=[...], methods=[...], reviews=[...] or for_operator=True.
@@ -643,7 +648,7 @@ Do not edit service records or other studies. Resume from lab.status() and your 
             try:
                 while not self.boundary():
                     try:
-                        if self.finalization_due():
+                        if self.finalization_due() and not self.service.campaign_closeout():
                             self.finalize_report()
                             if self.service.status()["completed"] and not self.boundary():
                                 write_report(self.service, self.state | {"status": "completed"})
@@ -657,6 +662,7 @@ Do not edit service records or other studies. Resume from lab.status() and your 
                         now = time.time()
                         if (
                             worker_wait.get("status") == "waiting"
+                            and not self.service.campaign_closeout()
                             and now - self.state.get("parked_housekeeping_at", 0) < 30
                         ):
                             # Quiet waits do not reread every large numerical receipt
@@ -678,13 +684,18 @@ Do not edit service records or other studies. Resume from lab.status() and your 
                         snapshot = self.service.status()
                         self.state.pop("last_error", None)
                         if snapshot["completed"]:
-                            self.finalize_report()
+                            if not snapshot.get("campaign_closeout"):
+                                self.finalize_report()
                             self.service.cancel_active()
                             snapshot = self.service.status()
                             # Completion is the publication barrier for the final report.
                             # Readers must not observe it alongside the preceding report.
                             write_report(self.service, self.state | {"status": "completed"})
                             self.state["status"] = "completed"
+                            if snapshot.get("campaign_closeout"):
+                                self.state["activity"] = (
+                                    "Finished · hypothesis " + snapshot["original_disposition"]
+                                )
                             self.save()
                             return 0
                         if self.boundary():
@@ -692,6 +703,8 @@ Do not edit service records or other studies. Resume from lab.status() and your 
                         if self.finalization_due():
                             continue
                         self.run_director()
+                        if self.service.campaign_closeout():
+                            continue  # Publish completion before another worker launch.
                         if any(
                             r["status"] == "queued" for r in self.service._all("report_requests")
                         ):

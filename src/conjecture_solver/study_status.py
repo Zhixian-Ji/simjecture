@@ -83,6 +83,8 @@ def study_status(root):
             activity = "Waiting for feedback · " + worker_wait["reason"]
     if status != "running":
         activity = status.replace("_", " ")
+        if status == "completed" and (root / "campaign_closeout.json").exists():
+            activity = state.get("activity") or "Investigation finished"
         if status == "paused_external_error" and state.get("last_error"):
             activity = state.get("provider_attention") or (activity + ": " + state["last_error"])
         if status == "budget_exhausted" and early_stop:
@@ -204,6 +206,7 @@ def study_status(root):
         else {"supported": False, "can_extend": False},
         finalization=report_status(root, manifest),
         report_assessments=[read(p) for p in sorted((root / "report_requests").glob("*.json"))],
+        campaign_closeout=read(root / "campaign_closeout.json"),
         worker_wait=worker_wait,
         director_policy=manifest.get("director_policy", {"enabled": False}),
         director_route=state.get("reviewer_route", {}),
