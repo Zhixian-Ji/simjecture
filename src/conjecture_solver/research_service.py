@@ -418,6 +418,8 @@ class ResearchService(
         monitor=None,
     ):
         """Snapshot inputs, launch a bounded experiment, return an immediate receipt."""
+        if self.campaign_closeout():
+            raise ValueError("Investigation finished; use a continuation for new experiments")
         if not outputs or not _positive_finite_seconds(timeout):
             raise ValueError("Declare result paths and a positive finite timeout")
         for p in outputs:
@@ -465,6 +467,8 @@ class ResearchService(
             path = self.root / "experiments" / (identifier + ".json")
             if path.exists():
                 return self._read("experiments", identifier)
+            if self.campaign_closeout():
+                raise ValueError("Investigation finished; use a continuation for new experiments")
             from .research_finalization import execution_deadline
 
             cutoff = execution_deadline(
@@ -945,6 +949,11 @@ class ResearchService(
         repair_supported = any(
             r["claim"] != "root" and r["verdict"]["disposition"] == "supported" for r in accepted
         )
+        scientific_completed = original_supported or (
+            original_falsified
+            and (repair_supported or self.manifest.get("completion_policy") == "answer")
+        )
+        closeout = self.campaign_closeout()
         from .research_finalization import report_status
 
         snapshot = dict(
@@ -966,11 +975,9 @@ class ResearchService(
             else "falsified"
             if original_falsified
             else "unresolved",
-            completed=original_supported
-            or (
-                original_falsified
-                and (repair_supported or self.manifest.get("completion_policy") == "answer")
-            ),
+            completed=scientific_completed or bool(closeout),
+            scientific_completed=scientific_completed,
+            campaign_closeout=closeout,
             experiments=self._all("experiments"),
             commitments=self._all("commitments"),
             reviews=reviews,

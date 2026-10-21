@@ -147,7 +147,9 @@ def study_findings(snapshot, manifest):
         recommended_review_reserve_seconds=review_reserve,
         budget_warning=budget_warning,
         execution_counts=dict(Counter(e["status"] for e in experiments)),
-        scientific_status="accepted" if snapshot["completed"] else "unresolved",
+        scientific_status="accepted"
+        if snapshot.get("scientific_completed", snapshot["completed"])
+        else "unresolved",
         coverage=coverage,
         estimated_serial_validation_seconds=estimate_total,
         estimate_note="Heuristic from completed jobs, excluding analysis/review; not a guarantee.",
@@ -224,6 +226,14 @@ def _write_navigation(service, state, snapshot):
         "",
     ]
     finishing = snapshot.get("finalization", {})
+    if snapshot.get("campaign_closeout"):
+        closeout = snapshot["campaign_closeout"]
+        index += [
+            f"Investigation finished: {closeout['reason']}",
+            "",
+            f"- [Accepted frozen report]({quote(closeout['report'])})",
+            "",
+        ]
     if finishing:
         index += [f"Report assessment: {finishing.get('report_status', 'not_started')}.", ""]
         if finishing.get("report"):

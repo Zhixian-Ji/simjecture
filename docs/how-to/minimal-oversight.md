@@ -367,6 +367,17 @@ asking the host to route a report is insufficient. Parking cannot accompany a re
 or wake-up, and cannot bypass an outstanding replan acknowledgement. New operator
 guidance remains effective while parked.
 
+If no useful further work remains planned, the director can instead return
+`decision="finish"` with `closeout_report="report_ID"` and a concrete rationale.
+The host requires an accepted, unchanged report covering the current scientific
+record, no active jobs or pending reviews/replans, and no unconsidered operator
+guidance. It publishes the final report and exits before the wall deadline.
+The monitor shows **Finished · hypothesis unresolved** when that is the outcome.
+This closes the investigation, without approving a claim or promoting evidence.
+Temporary feedback waits continue to use `park_worker`; an accepted report alone
+does not terminate a campaign. The closeout and frozen assessment remain available
+through the CLI/API status and browser monitor. Further research uses a continuation.
+
 In the monitor, **Evidence & review → Independent report assessments** shows requests,
 verdicts, revisions and frozen-report links. **Assess current report** queues the same
 operation for a running minimal study in an operator workspace. Read-only hosted views

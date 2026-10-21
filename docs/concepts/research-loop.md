@@ -62,6 +62,13 @@ the headless CLI defaults to the repair policy. The hosted public trial currentl
 uses answer policy; use a local workspace or CLI study for the full repair loop.
 Choose deliberately when preparing the brief. Research **mode** and **completion policy** are separate settings.
 
+Finishing an investigation is separate from resolving its hypothesis. When no useful
+feasible test remains, the director can finish early with an independently accepted
+report and an explicit reason. There must be no active jobs, pending reviews or
+unconsidered guidance. A finished investigation can retain an **unresolved** scientific
+outcome; report acceptance alone never establishes the hypothesis. Waiting for a
+running job, review or needed operator input does not finish the investigation.
+
 ## 5. Review the evidence independently
 
 A separate agent context examines the target claim, frozen source, results,
