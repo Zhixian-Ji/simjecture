@@ -5673,7 +5673,6 @@ _MATERIAL_SKILL_FORBIDDEN = (
     "tungsten",
     "CH foam",
     "CH-foam",
-    "IONMIX",
     "tomzhu",
     "material-physics-deps",
     "opacity-generator-audit",
@@ -5715,6 +5714,7 @@ def test_builtin_eos_skill_states_model_limits_without_campaign_science() -> Non
         "singularity-eos-1.12.1",
         "m-aneos-1.0",
         "feos-16.7",
+        "material-eos-0.1",
     ]
 
 

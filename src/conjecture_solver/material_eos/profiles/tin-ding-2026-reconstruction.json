@@ -1,0 +1,44 @@
+{
+  "schema_version": "1",
+  "id": "tin-ding-2026-reconstruction",
+  "version": "1.0.0",
+  "engine": "tin-ding-2026",
+  "scientific_status": "research-reconstruction",
+  "sources": [
+    "https://doi.org/10.1063/5.0350372",
+    "https://doi.org/10.1016/j.cpc.2018.01.008",
+    "https://doi.org/10.17632/6vjsv6v48p.1"
+  ],
+  "parameters": {
+    "atomic_weight": 118.71,
+    "z": 50,
+    "rho0": 7550.0,
+    "t0": 300.0,
+    "bulk0": 58000000000.0,
+    "theta0": 160.0,
+    "gamma_ref": 2.283,
+    "gamma_prime_left": -1.58,
+    "gamma_prime_right": -1.58,
+    "gamma_infinity": 0.6666666666666666,
+    "gamma_dilute": 1.0,
+    "tm0": 505.0,
+    "alpha": 0.3333333333333333,
+    "cohesive_energy": 2550000.0,
+    "soft_m": 0.5817,
+    "soft_n_printed": 2.7714,
+    "soft_a_cgs_printed": 24990000.0,
+    "soft_b_cgs_printed": 9958000000.0
+  },
+  "modifications": [
+    "Use the paper ionic and compressed-density expressions; this is not native FEOS Cowan ions.",
+    "At low density replace TF cold energy with a soft-sphere curve; fix the published attractive exponent and cohesive energy, and solve for A, B, n from P0=E0=0 and the stated bulk modulus. This differs from the literal paper coefficients.",
+    "Retain the small solid-liquid switching discontinuities and record component energy offsets separately."
+  ],
+  "limitations": [
+    "Exact reproduction of the paper pressure curves is not established.",
+    "No solid-solid transitions, latent heat, solid-liquid coexistence, or liquid-vapor Maxwell construction.",
+    "The low-density branch is a documented reconstruction, not an author-confirmed correction.",
+    "This equilibrium EOS does not validate a nonequilibrium two-temperature split.",
+    "A new element needs its own calibration; this tin profile cannot be relabeled."
+  ]
+}
