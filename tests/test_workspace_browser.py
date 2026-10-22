@@ -641,6 +641,111 @@ def test_theme_and_confirmed_conversation_deletion(tmp_path):
         server.server_close()
 
 
+@pytest.mark.parametrize(
+    ("width", "height", "theme"),
+    [(1440, 900, "light"), (1440, 900, "dark"), (900, 768, "light"), (390, 844, "dark")],
+)
+def test_long_run_histories_scroll_separately_from_details(
+    tmp_path, monkeypatch, width, height, theme
+):
+    playwright = pytest.importorskip("playwright.sync_api")
+    app = SimjectureWebApplication(runs_root=tmp_path, scan_roots=(tmp_path,))
+    project = app.workspace.create({"name": "Long run history"})
+    directory = app.workspace.directory(project["id"])
+    for i in range(60):
+        (directory / f"files/fixture-{i:02}.txt").write_text("UI fixture\n")
+    jobs = [
+        dict(
+            id=f"{kind}-{i:02}",
+            name=f"{label} {i:02}",
+            kind=kind,
+            status="succeeded",
+            native=True,
+            output="\n".join(f"step {n}" for n in range(100)),
+            files=[dict(name=f"fixture-{n:02}.txt", role="output") for n in range(60)],
+        )
+        for kind, label in [("simulation", "Simulation"), ("command", "Command")]
+        for i in range(60)
+    ]
+    original_project = app.workspace.project
+
+    def with_history(identifier):
+        result = original_project(identifier)
+        return result | {"simulations": jobs} if identifier == project["id"] else result
+
+    monkeypatch.setattr(app.workspace, "project", with_history)
+    server = create_server(app, port=0)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    screenshots = Path("artifacts/workspace-preview")
+    screenshots.mkdir(parents=True, exist_ok=True)
+    try:
+        with playwright.sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page(viewport={"width": width, "height": height})
+            page.goto(f"http://127.0.0.1:{server.server_port}/#project=" + project["id"])
+            page.locator("#chat-input").wait_for()
+            page.evaluate("theme => WorkspaceTheme.set(theme)", theme)
+            inspector = page.locator("#research-inspector")
+            inspector.scroll_into_view_if_needed()
+            saved_scroll = {}
+            for panel, prefix, label in [
+                ("simulations", "simulation", "Simulation"),
+                ("commands", "command", "Command"),
+            ]:
+                page.locator(f'wa-tab[panel="{panel}"]').click()
+                history = page.locator(f"#{prefix}-list")
+                detail = page.locator(f"#{prefix}-detail")
+                playwright.expect(history.locator("a")).to_have_count(50)
+                assert history.evaluate("e => e.scrollHeight > e.clientHeight")
+                assert history.bounding_box()["height"] < inspector.bounding_box()["height"] / 2
+                history.evaluate("e => e.scrollTop = e.scrollHeight")
+                history.get_by_text(f"{label} 10", exact=True).click()
+                playwright.expect(detail.locator("h3")).to_have_text(f"{label} 10")
+                playwright.expect(detail.locator("h3")).to_be_in_viewport()
+                history_scroll = history.evaluate("e => e.scrollTop")
+                assert history_scroll > 0
+                detail.evaluate("e => e.scrollTop = 210")
+                # A status refresh rebuilds history but must not move either pane.
+                next(j for j in jobs if j["id"] == f"{prefix}-00")["status"] = "failed"
+                page.evaluate("""async () => {
+                    state.project = await api(`project?id=${encodeURIComponent(state.project.id)}`);
+                    renderProject();
+                }""")
+                assert history.evaluate("e => e.scrollTop") == history_scroll
+                assert detail.evaluate("e => e.scrollTop") == 210
+                assert inspector.evaluate("e => e.scrollTop") == 0
+                history.get_by_role("button", name=f"Show 10 more {panel}").click()
+                playwright.expect(history.locator("a")).to_have_count(60)
+                history.evaluate("e => e.scrollTop = e.scrollHeight")
+                history.get_by_text(f"{label} 00", exact=True).click()
+                playwright.expect(detail.locator("h3")).to_have_text(f"{label} 00")
+                playwright.expect(detail.locator("h3")).to_be_in_viewport()
+                assert detail.evaluate("e => e.scrollTop") == 0
+                saved_scroll[panel] = history.evaluate("e => e.scrollTop")
+            page.locator('wa-tab[panel="simulations"]').click()
+            assert page.locator("#simulation-list").evaluate("e => e.scrollTop") == (
+                saved_scroll["simulations"]
+            )
+            page.locator('wa-tab[panel="commands"]').click()
+            assert page.locator("#command-list").evaluate("e => e.scrollTop") == (
+                saved_scroll["commands"]
+            )
+            page.screenshot(path=str(screenshots / f"run-history-{width}-{theme}.png"))
+            page.locator('wa-tab[panel="files"]').click()
+            files = page.locator('#inspector-tabs wa-tab-panel[name="files"]')
+            assert files.evaluate("e => e.scrollHeight > e.clientHeight")
+            last_file = files.get_by_role("link", name="fixture-59.txt", exact=True)
+            last_file.scroll_into_view_if_needed()
+            playwright.expect(last_file).to_be_in_viewport()
+            playwright.expect(page.locator('wa-tab[panel="commands"]')).to_be_in_viewport()
+            assert inspector.evaluate("e => e.scrollTop") == 0
+            assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+            browser.close()
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
 def test_refresh_preserves_inspector_and_tool_details_and_dark_math(tmp_path, monkeypatch):
     playwright = pytest.importorskip("playwright.sync_api")
     app = SimjectureWebApplication(runs_root=tmp_path, scan_roots=(tmp_path,))
@@ -700,7 +805,7 @@ def test_refresh_preserves_inspector_and_tool_details_and_dark_math(tmp_path, mo
               detail.open=true;
               const console = document.querySelector('.live-console');
               console.scrollTop=90;
-              const inspector=document.querySelector('.project-context');
+              const inspector=document.querySelector('#simulation-detail');
               inspector.scrollTop=210;
               job={...job,output:job.output+'\nnew step'};
               await monitor.update();

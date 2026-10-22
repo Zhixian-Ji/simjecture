@@ -871,8 +871,8 @@
                 >
                 <wa-tab panel="files">Project files</wa-tab>
                 <wa-tab-panel name="simulations">
-                  <div id="simulation-list"></div>
-                  <div id="simulation-detail">
+                  <div id="simulation-list" role="region" aria-label="Simulation history" tabindex="0"></div>
+                  <div id="simulation-detail" role="region" aria-label="Selected simulation" tabindex="0">
                     <div class="monitor-empty">
                       <span class="monitor-symbol">⌁</span>
                       <h3>Your experiments, in view.</h3>
@@ -884,8 +884,8 @@
                   </div>
                 </wa-tab-panel>
                 <wa-tab-panel name="commands">
-                  <div id="command-list"></div>
-                  <div id="command-detail">
+                  <div id="command-list" role="region" aria-label="Command history" tabindex="0"></div>
+                  <div id="command-detail" role="region" aria-label="Selected command" tabindex="0">
                     <p class="monitor-empty">
                       Agent commands and their output appear here.
                     </p>

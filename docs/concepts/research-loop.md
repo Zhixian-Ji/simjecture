@@ -5,7 +5,7 @@ which an answer would matter. Simjecture gives an agent a bounded period in whic
 to investigate it, while keeping an inspectable connection between each claim,
 the experiments behind it and the decisions made in review.
 
-![A human frames the question; the worker tests and challenges it; a falsification leads to a committed repair and fresh experiments; independent review can accept a conclusion or return missing evidence.](../_static/architecture/research-loop.svg)
+[![Human direction and director oversight connect scientific hypothesis testing with independently reviewed instrument development.](../_static/architecture/research-loop.png)](../_static/architecture/research-loop.pdf)
 
 ## 1. Agree on the question
 

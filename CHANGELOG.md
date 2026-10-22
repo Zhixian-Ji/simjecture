@@ -4,6 +4,11 @@ This project follows semantic versioning. Dates use ISO 8601.
 
 ## Unreleased
 
+- Keep the workspace tabs visible and give simulation/command history and the
+  selected run independent scrolling, including on narrow screens. Preserve
+  reading positions during live refreshes. Use the preprint's Figure 1 for the
+  research-loop illustration in the README and documentation.
+
 - Preserve successful Codex responses after recovered connection errors instead
   of reporting a provider failure with exit code zero. Later failures, unfinished
   successor turns and unsuccessful process exits still report errors.

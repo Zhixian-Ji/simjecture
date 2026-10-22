@@ -126,6 +126,11 @@ Conversation-side **Simulations** are exploration results. Recorded experiments
 and completed processes do not by themselves establish scientific acceptance;
 read the independent reviews and the scope of the accepted finding.
 
+In the right-hand workspace, **Simulations** and **Commands** each have a scrollable
+history above the selected run. Its console and files scroll separately below,
+so a long history does not push the run out of view. The tabs stay visible, and
+live refreshes preserve your reading position.
+
 Selecting a simulation shows **Run outputs** from its own workspace. **Copied
 inputs** is a separate, collapsed section: the launch snapshot can contain shared
 reports or results from earlier runs, which are not outputs of the selected run.

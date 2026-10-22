@@ -143,10 +143,31 @@ button, .button { transition: background-color 140ms ease, border-color 140ms ea
 
 /* Bound the tab strip to the inspector, so every tab stays reachable when
    the panel is narrow. Web Awesome supplies the overflow arrow buttons. */
-#inspector-tabs { width: 100%; min-width: 0; }
-#inspector-tabs::part(base) { width: 100%; min-width: 0; }
-#inspector-tabs::part(nav) { min-width: 0; max-width: 100%; }
+#inspector-tabs { width: 100%; min-width: 0; flex: 1; min-height: 0; }
+#inspector-tabs::part(base) { width: 100%; min-width: 0; height: 100%; min-height: 0; }
+#inspector-tabs::part(nav) { min-width: 0; max-width: 100%; flex-shrink: 0; }
 #inspector-tabs::part(tabs) { flex: 0 0 max-content; }
 #inspector-tabs wa-tab { flex: 0 0 auto; font-size: 12px; padding-inline: 9px; white-space: nowrap; }
 #inspector-tabs::part(scroll-button) { background: var(--paper); color: var(--ink); }
 #inspector-tabs::part(scroll-button__base) { padding-inline: 3px; }
+
+/* Keep navigation visible and scroll history independently of the selected run. */
+#research-inspector { display: flex; flex-direction: column; overflow: hidden; }
+#research-inspector .inspector-heading { flex-shrink: 0; }
+#inspector-tabs::part(body) { flex: 1; min-height: 0; overflow: hidden; }
+#inspector-tabs wa-tab-panel { height: 100%; min-height: 0; overflow: auto; overscroll-behavior-y: contain; }
+#inspector-tabs wa-tab-panel:is([name="simulations"], [name="commands"]) { overflow: hidden; }
+#inspector-tabs wa-tab-panel:is([name="simulations"], [name="commands"])::part(base) {
+  display: flex; flex-direction: column; gap: 12px; height: 100%; min-height: 0; box-sizing: border-box;
+}
+#simulation-list, #command-list {
+  flex: 0 1 auto; min-height: 0; max-height: 32%; overflow: auto;
+  overscroll-behavior-y: contain; scrollbar-gutter: stable;
+}
+:is(#simulation-list, #command-list):not(:empty) { border-bottom: 1px solid var(--line); padding-bottom: 6px; }
+#simulation-detail, #command-detail {
+  flex: 1; min-height: 0; overflow: auto; overscroll-behavior-y: contain; scrollbar-gutter: stable;
+}
+@media (max-width: 1000px) {
+  #research-inspector { height: min(650px, 80dvh); min-height: 0; }
+}

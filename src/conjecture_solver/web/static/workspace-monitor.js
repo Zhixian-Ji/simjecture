@@ -52,6 +52,8 @@ window.WorkspaceMonitor = {
             ),
           );
           delete container.dataset.job;
+          container.scrollTop = 0;
+          $(`${prefixFor(panel)}-list`).scrollTop = 0;
         }
       }
       const simulations = jobs.filter((j) => panelFor(j) === "simulations");
@@ -83,8 +85,10 @@ window.WorkspaceMonitor = {
       ]);
       if (nextList !== listRevision) {
         listRevision = nextList;
-        const inspector = document.querySelector(".project-context");
-        const inspectorScroll = inspector.scrollTop;
+        const listScroll = {
+          simulations: $("simulation-list").scrollTop,
+          commands: $("command-list").scrollTop,
+        };
         const sidebarScroll = $("sidebar-run-list").scrollTop;
         $("sidebar-run-list").replaceChildren();
         $("simulation-list").replaceChildren();
@@ -133,7 +137,8 @@ window.WorkspaceMonitor = {
           };
           $(`${prefixFor(panel)}-list`).append(more);
         }
-        inspector.scrollTop = inspectorScroll;
+        for (const panel of ["simulations", "commands"])
+          $(`${prefixFor(panel)}-list`).scrollTop = listScroll[panel];
         $("sidebar-run-list").scrollTop = sidebarScroll;
       }
       update().catch((e) => notify(e.message, true));
@@ -349,6 +354,7 @@ window.WorkspaceMonitor = {
             output,
             node("div", undefined, "simulation-files"),
           );
+          container.scrollTop = 0;
         }
         const status = container.querySelector(".run-state");
         status.textContent = job.status.replaceAll("_", " ");
