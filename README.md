@@ -24,7 +24,7 @@ measurements, counterexamples and review.
 
 ## The research loop
 
-![Human direction, autonomous investigation, recorded experiments, independent review, and fresh tests of committed repairs](https://raw.githubusercontent.com/tomzhu0225/simjecture/main/docs/_static/architecture/research-loop.svg)
+[![Human direction and director oversight connect scientific hypothesis testing with independently reviewed instrument development](https://raw.githubusercontent.com/tomzhu0225/simjecture/main/docs/_static/architecture/research-loop.png)](https://raw.githubusercontent.com/tomzhu0225/simjecture/main/docs/_static/architecture/research-loop.pdf)
 
 A counterexample must survive the relevant numerical controls. Under the **repair**
 completion policy, the agent then proposes the smallest justified change to the
