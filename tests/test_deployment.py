@@ -68,6 +68,7 @@ def _project(tmp_path: Path) -> Path:
         ("singularity-eos-1.12.1", "../.runtime/singularity-eos-1.12.1"),
         ("m-aneos-1.0", "../.runtime/m-aneos-1.0"),
         ("feos-16.7", "../.runtime/feos-16.7"),
+        ("material-eos-0.1", "../.runtime/material-eos-0.1"),
         ("optab-1.3.1", "../.runtime/optab-1.3.1"),
     ):
         (root / "capabilities" / f"{name}.json").write_text(
@@ -81,6 +82,7 @@ def _project(tmp_path: Path) -> Path:
         "skills/eos/scripts/bootstrap_singularity_eos.sh",
         "skills/eos/scripts/bootstrap_maneos.sh",
         "skills/eos/scripts/bootstrap_feos.sh",
+        "skills/eos/scripts/bootstrap_material_eos.sh",
         "skills/opacity/scripts/bootstrap_optab.sh",
         "skills/flash-mhd/scripts/bootstrap_flash.sh",
     ):
@@ -291,6 +293,7 @@ def test_flash_private_overlay_env_overrides_checkout_dot_private(
         ),
         ("m-aneos", "skills/eos/scripts/bootstrap_maneos.sh", "m-aneos-1.0"),
         ("feos", "skills/eos/scripts/bootstrap_feos.sh", "feos-16.7"),
+        ("material-eos", "skills/eos/scripts/bootstrap_material_eos.sh", "material-eos-0.1"),
         ("optab", "skills/opacity/scripts/bootstrap_optab.sh", "optab-1.3.1"),
     ),
 )
@@ -515,6 +518,7 @@ def test_committed_eos_and_opacity_capability_configs_parse() -> None:
         "singularity-eos-1.12.1": "eos",
         "m-aneos-1.0": "eos",
         "feos-16.7": "eos",
+        "material-eos-0.1": "eos",
         "optab-1.3.1": "opacity",
     }
     for name, skill in expected.items():

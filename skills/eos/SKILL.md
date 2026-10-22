@@ -44,6 +44,7 @@ Each capability is a different code. Name the model that actually ran.
 | `singularity-eos-1.12.1` | Singularity-EOS 1.12.x | Named analytic or tabulated closures through a query driver or Python module |
 | `m-aneos-1.0` | M-ANEOS 1.0.x | Semi-analytic total-material Helmholtz EOS from an operator-supplied parameter set |
 | `feos-16.7` | Frankfurt FEOS 16.7 | QEOS electron/ion thermodynamics and charge state from a declared material database |
+| `material-eos-0.1` | Material EOS builder | Explicit versioned model profiles, domain checks, and EOS table export |
 
 Select the advertised capability through the active API above. With classic
 `run_capability`, the first argv item is the workspace-relative Python program;
@@ -55,7 +56,28 @@ variables, units, and the query JSON contract. Read
 [local deployment](references/local-deployment.md) only when registering or
 repairing a runtime; it is not a campaign procedure.
 
+For table generation or a paper-specific model, read
+[material models and export](references/material-models.md). The FEOS evaluator
+and material builder are separate capabilities. A paper recipe is an explicit
+profile input, never a replacement for the default model of another material.
+
 ## Limitations
+
+### Material EOS builder
+
+- Select a profile and density/temperature grid explicitly. Native FEOS also
+  requires a material database and material ID. A paper-specific profile carries
+  its parameter sources, modifications, and unresolved limitations.
+- Distinguish native corrected electrons, which include bonding, from raw TF
+  electrons and thermal increments. Combining a custom ion/bonding model with
+  native total FEOS quantities can double-count the same contributions.
+- A table that passes finite-value, component, and serialization checks has not
+  thereby passed material validation or a full consuming-solver run.
+- Keep numerical offsets and grid changes in the output record. Preserve
+  failed domain checks in an explicitly requested research export; do not
+  silently replace unstable states with another material model.
+- Exported thermodynamics contain no opacity. The builder does not install
+  FLASH or supply independently qualified material parameters for new elements.
 
 ### Frankfurt FEOS
 

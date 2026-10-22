@@ -95,6 +95,7 @@ RUNTIME_PACKAGES = {
     "singularity-eos": ["python=3.11", "git", "gxx_linux-64=12", "make"],
     "m-aneos": ["python=3.11", "git", "gfortran_linux-64=12", "make"],
     "feos": ["python=3.11", "gxx_linux-64=12", "make"],
+    "material-eos": ["python=3.11", "numpy=2.2", "scipy=1.15", "gxx_linux-64=12", "make"],
     "optab": [
         "python=3.11",
         "pip",

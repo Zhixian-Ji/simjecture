@@ -3,11 +3,12 @@
     "atomec-1.4.0",
     "singularity-eos-1.12.1",
     "m-aneos-1.0",
-    "feos-16.7"
+    "feos-16.7",
+    "material-eos-0.1"
   ],
   "description": "Commission user-installed equation-of-state generators and evaluators; record model identity and validity limits",
   "entrypoint": "SKILL.md",
   "name": "eos",
   "schema_version": "0.1.0",
-  "version": "0.1.2"
+  "version": "0.2.0"
 }

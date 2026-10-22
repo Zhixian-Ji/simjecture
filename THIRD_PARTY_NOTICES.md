@@ -39,6 +39,12 @@ external runtime. The installer links the query adapter against that library;
 the resulting executable is subject to FEOS's GPL terms. No upstream FEOS
 source or generated material tables are vendored in this repository.
 
+The material EOS builder also links an independently authored raw Thomas–Fermi
+adapter to external FEOS code; the resulting shared library remains subject to
+FEOS's upstream terms. Its tin reconstruction is independently implemented from
+the cited published equations, with sources and calibration changes recorded in
+the model profile. No paper PDF, FLASH source or generated EOS tables are bundled.
+
 Model providers, literature services, and externally supplied guided
 commissioning packages are services or inputs rather than sublicensed parts of
 this source distribution. Run artifacts must retain the provenance and license

@@ -1141,6 +1141,7 @@ const toolLabels = {
   "singularity-eos": ["Singularity-EOS", "Equation of state", "ES", "Materials & radiation"],
   "m-aneos": ["M-ANEOS", "Equation of state", "ES", "Materials & radiation"],
   "feos": ["Frankfurt FEOS", "Electron/ion equation of state", "ES", "Materials & radiation"],
+  "material-eos": ["Material EOS builder", "Model profiles and table export", "ES", "Materials & radiation"],
   "optab": ["Optab", "Opacity tables", "OP", "Materials & radiation"],
 };
 function catalogTools() {

@@ -4,6 +4,12 @@ This project follows semantic versioning. Dates use ISO 8601.
 
 ## Unreleased
 
+- Add a separate Material EOS builder tool and managed runtime, guided by the
+  EOS skill. Support explicit native FEOS material inputs and a versioned tin
+  paper reconstruction, with component accounting, domain checks, provenance
+  and EOS-only FLASH IONMIX4 export. Keep reconstruction status and calibration
+  limits explicit; no opacity or automatic material qualification is implied.
+
 - Add the checksummed Frankfurt FEOS 16.7 installer, runtime doctor and research
   tool catalogue entry. Expose homogeneous electron/ion QEOS contributions through
   single-state and batch queries, preserve runtime/material identities, and turn

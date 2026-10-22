@@ -1,0 +1,49 @@
+{
+  "environment": {
+    "MATERIAL_EOS_BUILD": "/opt/acs-capabilities/material-eos-0.1/bin/material-eos-builder",
+    "FEOS_QUERY": "/opt/acs-capabilities/material-eos-0.1/bin/feos-query",
+    "FEOS_TF_LIBRARY": "/opt/acs-capabilities/material-eos-0.1/lib/libfeos-tf.so",
+    "FEOS_DATA": "/opt/acs-capabilities/material-eos-0.1/share/feos",
+    "OMP_NUM_THREADS": "1",
+    "OPENBLAS_NUM_THREADS": "1",
+    "PYTHONDONTWRITEBYTECODE": "1"
+  },
+  "executable": "bin/python",
+  "identity_files": [
+    "bin/material-eos-builder",
+    "bin/feos-query",
+    "lib/libfeos-tf.so",
+    "share/build-record.json",
+    "share/feos/FEOS_TF-Table_1197.dat",
+    "share/feos/FEOS_Material-DB.dat",
+    "share/material_eos/__init__.py",
+    "share/material_eos/__main__.py",
+    "share/material_eos/backend.py",
+    "share/material_eos/builder.py",
+    "share/material_eos/ionmix.py",
+    "share/material_eos/profiles/native-feos.json",
+    "share/material_eos/profiles/tin-ding-2026-reconstruction.json",
+    "share/material_eos/profiles.py",
+    "share/material_eos/tin.py"
+  ],
+  "manifest": {
+    "description": "Build explicit material EOS profiles and export thermodynamic tables; no opacity or automatic material qualification",
+    "executable_kind": "python-material-eos",
+    "name": "material-eos-0.1",
+    "preflight_checks": [
+      "checks.completed",
+      "checks.executable_present",
+      "checks.process_completed",
+      "checks.return_code_zero",
+      "checks.table_written",
+      "checks.serialization_checked",
+      "checks.profile_recorded"
+    ],
+    "preflight_resource": "examples/material_eos_runtime_smoke.py",
+    "preflight_result": "material_eos_capability_smoke.json",
+    "schema_version": "0.1.0",
+    "skill": "eos",
+    "version": "0.1.0"
+  },
+  "runtime_root": "../.runtime/material-eos-0.1"
+}

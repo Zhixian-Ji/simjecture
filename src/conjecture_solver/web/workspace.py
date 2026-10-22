@@ -52,6 +52,12 @@ CATALOGUE = [
     ("singularity-eos", "Singularity-EOS", "Equation-of-state library", "install"),
     ("m-aneos", "M-ANEOS", "Multiphase equation of state", "install"),
     ("feos", "Frankfurt FEOS", "Electron/ion QEOS thermodynamics; no opacity", "install"),
+    (
+        "material-eos",
+        "Material EOS builder",
+        "Model profiles and FLASH tables; no opacity",
+        "install",
+    ),
     ("optab", "Optab", "Opacity tables", "install"),
 ]
 

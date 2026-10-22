@@ -28,6 +28,7 @@ Use Install in Research tools, or run these commands from the installed Simjectu
 uv run simjecture install atomec
 uv run simjecture install singularity-eos
 uv run simjecture install m-aneos
+uv run simjecture install material-eos
 uv run simjecture install feos
 ```
 
@@ -49,10 +50,19 @@ Then verify:
 uv run simjecture doctor --profile atomec
 uv run simjecture doctor --profile singularity-eos
 uv run simjecture doctor --profile m-aneos
+uv run simjecture doctor --profile material-eos
 uv run simjecture doctor --profile feos
 ```
 
 The doctor probes are permanently non-evidentiary interface checks.
+
+`material-eos` is a separate builder runtime. It reuses the pinned FEOS source
+bootstrap, adds a raw TF adapter and the versioned material-model/export package,
+and provisions NumPy/SciPy in its own managed environment. It does not modify an
+existing FEOS installation. Its upstream-deck smoke exercises construction and
+serialization only; it does not commission a paper-specific material profile.
+The installer hashes the builder modules and profiles as well as FEOS binaries
+and data. No external material table or licensed solver source is bundled.
 
 ## Runtime layout
 

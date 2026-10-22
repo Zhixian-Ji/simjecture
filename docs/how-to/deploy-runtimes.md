@@ -108,6 +108,11 @@ EOS tables. FEOS does not generate opacity. See the
 [EOS deployment guide](https://github.com/tomzhu0225/simjecture/blob/main/skills/eos/references/local-deployment.md) and
 [FEOS query interface](https://github.com/tomzhu0225/simjecture/blob/main/skills/eos/references/feos.md).
 
+The separate **Material EOS builder** uses `simjecture install material-eos` and
+`simjecture doctor --profile material-eos`. It adds versioned material profiles,
+recorded calibration, domain checks and EOS-only IONMIX4 export. See
+[building material EOS tables](material-eos.md) for model selection and validation.
+
 atoMEC, Singularity-EOS, and M-ANEOS are optional instruments. The installer
 clones the pinned upstream revision into a Git-ignored runtime, compiles any
 query driver, and runs a non-evidentiary probe. Host prerequisites are Git and

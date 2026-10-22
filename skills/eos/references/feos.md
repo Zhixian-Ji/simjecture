@@ -43,6 +43,12 @@ a homogeneous two-temperature state using the electronic contribution at `Te`
 and the ionic contribution at `Ti`. Store its assumptions and tested domain.
 The adapter supplies neither an electron–ion equilibration rate nor radiation EOS.
 
+For a custom material free energy or a solver table, use the separate
+[material builder](material-models.md). Its paper model uses a raw TF adapter
+that supports an exact zero-temperature reference. Do not approximate that
+reference by sending zero through this positive-temperature native query API,
+or add native corrected-electron bonding a second time.
+
 The independently authored adapter calls `FEOS_Get_EOS_All` exclusively. In the
 16.7 source, the task-selecting `FEOS_Get_EOS` switch lacks `break` statements,
 so it must not be used to retrieve a component. Some upstream errors call

@@ -1,0 +1,18 @@
+{
+  "schema_version": "1",
+  "id": "native-feos",
+  "version": "1.0.0",
+  "engine": "native-feos",
+  "scientific_status": "material-qualification-not-established",
+  "sources": [
+    "https://doi.org/10.1016/j.cpc.2018.01.008",
+    "https://doi.org/10.17632/6vjsv6v48p.1"
+  ],
+  "parameters": {},
+  "modifications": [],
+  "limitations": [
+    "Material parameters must come from the explicitly supplied database and retain their sources.",
+    "The adapter disables Maxwell construction and soft-sphere replacement.",
+    "Classical Thomas-Fermi electrons omit shell structure; no opacity is produced."
+  ]
+}

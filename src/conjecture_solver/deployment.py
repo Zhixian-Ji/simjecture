@@ -33,6 +33,7 @@ ATOMEC_CAPABILITY = "atomec-1.4.0"
 SINGULARITY_EOS_CAPABILITY = "singularity-eos-1.12.1"
 M_ANEOS_CAPABILITY = "m-aneos-1.0"
 FEOS_CAPABILITY = "feos-16.7"
+MATERIAL_EOS_CAPABILITY = "material-eos-0.1"
 OPTAB_CAPABILITY = "optab-1.3.1"
 ITER_PACK_CAPABILITY = "iter-pack-1.0"
 WARP_LBM_CAPABILITY = "warp-lbm-cylinder-1.0"
@@ -54,6 +55,7 @@ _CAPABILITY_CONFIGS = {
     SINGULARITY_EOS_CAPABILITY: "singularity-eos-1.12.1.json",
     M_ANEOS_CAPABILITY: "m-aneos-1.0.json",
     FEOS_CAPABILITY: "feos-16.7.json",
+    MATERIAL_EOS_CAPABILITY: "material-eos-0.1.json",
     OPTAB_CAPABILITY: "optab-1.3.1.json",
 }
 _CORE_DISTRIBUTIONS = (
@@ -99,6 +101,7 @@ class DeploymentProfile(StrEnum):
     SINGULARITY_EOS = "singularity-eos"
     M_ANEOS = "m-aneos"
     FEOS = "feos"
+    MATERIAL_EOS = "material-eos"
     OPTAB = "optab"
 
 
@@ -112,9 +115,13 @@ _PROFILE_BY_CAPABILITY = {
     SINGULARITY_EOS_CAPABILITY: DeploymentProfile.SINGULARITY_EOS,
     M_ANEOS_CAPABILITY: DeploymentProfile.M_ANEOS,
     FEOS_CAPABILITY: DeploymentProfile.FEOS,
+    MATERIAL_EOS_CAPABILITY: DeploymentProfile.MATERIAL_EOS,
     OPTAB_CAPABILITY: DeploymentProfile.OPTAB,
 }
 _MISSING_RUNTIME_REMEDY = {
+    MATERIAL_EOS_CAPABILITY: (
+        "Run `simjecture install material-eos` for model profiles and table export."
+    ),
     FEOS_CAPABILITY: (
         "Run `simjecture install feos` to build the checksummed Frankfurt FEOS source."
     ),
@@ -146,6 +153,9 @@ _MISSING_RUNTIME_REMEDY = {
     ),
 }
 _PREFLIGHT_REMEDY = {
+    MATERIAL_EOS_CAPABILITY: (
+        "Inspect the builder report; run `simjecture install material-eos --repair`."
+    ),
     FEOS_CAPABILITY: "Inspect the FEOS build record and rerun `simjecture install feos --repair`.",
     ITER_PACK_CAPABILITY: "Inspect the report; run `simjecture install iter-pack --repair`.",
     WARPX_CPU_CAPABILITY: (
@@ -185,6 +195,14 @@ class _BootstrapSpec:
 
 
 _BOOTSTRAP_SPECS = {
+    DeploymentProfile.MATERIAL_EOS: _BootstrapSpec(
+        capability=MATERIAL_EOS_CAPABILITY,
+        script="skills/eos/scripts/bootstrap_material_eos.sh",
+        managed_marker="share/build-record.json",
+        pinned_revision="01c2e0d9e3d5c787418405bf9dd3bc5beec28566d4bdb7c53cffbabf756b5eb4",
+        source_label="Material EOS builder / Frankfurt FEOS 16.7",
+        verify_revision=False,
+    ),
     DeploymentProfile.FEOS: _BootstrapSpec(
         capability=FEOS_CAPABILITY,
         script="skills/eos/scripts/bootstrap_feos.sh",
