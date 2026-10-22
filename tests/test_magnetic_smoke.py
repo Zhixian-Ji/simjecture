@@ -10,7 +10,11 @@ import pytest
 from conjecture_solver import magnetic_smoke
 from conjecture_solver.deployment import DeploymentManager, DeploymentProfile
 from conjecture_solver.magnetic_smoke import polyline_field, run_case
-from conjecture_solver.mvp_skills import MVPCapabilityConfig, MVPCapabilityInstallation
+from conjecture_solver.mvp_skills import (
+    MVPCapabilityConfig,
+    MVPCapabilityInstallation,
+    MVPSkillCatalog,
+)
 
 
 def test_finite_wire_and_collinear_extension():
@@ -37,6 +41,31 @@ def test_loop_axial_field_and_geometry_resolution():
     assert errors[1] < errors[0] / 3.9
     assert errors[2] < errors[1] / 3.9
     assert errors[2] < 1e-4
+
+
+@pytest.mark.parametrize("z", [-1.0, 1.0])
+@pytest.mark.parametrize("x", [1e-7, 1e-9])
+def test_nearly_collinear_extension_matches_independent_quadrature(x, z):
+    from scipy.integrate import quad
+
+    current = 1000.0
+    expected = quad(
+        lambda s: 1e-7 * current * x / (x * x + (z - s) ** 2) ** 1.5,
+        0,
+        0.1,
+        epsabs=1e-30,
+    )[0]
+    actual = polyline_field([[x, 0, z]], [[0, 0, 0], [0, 0, 0.1]], current)[0]
+    assert actual[1] == pytest.approx(expected, rel=1e-12, abs=0)
+    assert actual[[0, 2]] == pytest.approx([0, 0], abs=1e-30)
+
+
+def test_magnetic_skill_is_discoverable_and_readable_by_the_agent():
+    catalog = MVPSkillCatalog.discover(Path(__file__).resolve().parents[1] / "skills")
+    assert "magnetic-smoke" in catalog
+    descriptor = next(d for d in catalog.descriptors() if d["name"] == "magnetic-smoke")
+    assert descriptor["capability_names"] == ["magnetic-smoke-1.0"]
+    assert catalog.read("magnetic-smoke", "SKILL.md", max_chars=20000)
 
 
 def test_rigid_rotation_translation_and_batched_probes():

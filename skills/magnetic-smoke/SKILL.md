@@ -11,6 +11,13 @@ identity-bound driver at `$SIMJECTURE_MAGNETIC_DRIVER`. Load that file with
 `polyline_field(points_m, vertices_m, current_a, exclusion_radius_m=...)`.
 The driver also accepts `--case input.json --output result.json`.
 
+Use the advertised capability with `lab.run` and keep the case and outputs
+inside the experiment workspace. A source program can launch the driver with
+`subprocess.run([sys.executable, os.environ["SIMJECTURE_MAGNETIC_DRIVER"],
+"--case", "input.json", "--output", "field.json"], check=True)`.
+This CLI route records input and driver hashes; callers of the Python functions
+must retain their inputs and source identity in the experiment record.
+
 Inputs use `schema_version: "1.0"`, `units: "SI"`, `probes` containing unique
 `name` and `position_m`, and `paths` containing unique `name`, `vertices_m`,
 `current_a` and optional `exclusion_radius_m`. Current follows vertex order.

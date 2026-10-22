@@ -64,9 +64,21 @@ def polyline_field(points_m, vertices_m, current_a, *, exclusion_radius_m=0.0):
                 out=np.zeros_like(rho2),
                 where=rho2 > 1e-30,
             )
+            # Beyond an endpoint, the two direction cosines nearly cancel.
+            # Rationalizing their difference cancels rho^2 analytically and
+            # preserves the small transverse field near the line's extension.
+            outside = (s < 0) | (s > ell)
+            np.divide(
+                ell * (2 * s - ell),
+                r1 * r2 * (s * r2 + (s - ell) * r1),
+                out=weight,
+                where=outside,
+            )
             field[first : first + len(probes)] += (
                 MU0_OVER_4PI * current_a * np.sum(np.cross(u, perp) * weight[:, :, None], axis=1)
             )
+    if not np.isfinite(field).all():
+        raise ValueError("Field calculation overflowed; check the coordinate and current scales")
     return field
 
 
