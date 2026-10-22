@@ -99,6 +99,15 @@ regime prospectively.
 
 ## Equation of state
 
+Frankfurt FEOS 16.7 is available as `simjecture install feos`, followed by
+`simjecture doctor --profile feos`. The installer verifies the published GPLv3
+source archive and builds a query adapter exposing separate electron/ion
+thermodynamics. The aluminium interface probe does not qualify other materials.
+Supply traced material parameters and assess the physical domain before making
+EOS tables. FEOS does not generate opacity. See the
+[EOS deployment guide](https://github.com/tomzhu0225/simjecture/blob/main/skills/eos/references/local-deployment.md) and
+[FEOS query interface](https://github.com/tomzhu0225/simjecture/blob/main/skills/eos/references/feos.md).
+
 atoMEC, Singularity-EOS, and M-ANEOS are optional instruments. The installer
 clones the pinned upstream revision into a Git-ignored runtime, compiles any
 query driver, and runs a non-evidentiary probe. Host prerequisites are Git and

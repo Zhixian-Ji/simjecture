@@ -43,6 +43,7 @@ Each capability is a different code. Name the model that actually ran.
 | `atomec-1.4.0` | atoMEC 1.4.x | Finite-temperature Kohn–Sham average-atom electron structure for one element |
 | `singularity-eos-1.12.1` | Singularity-EOS 1.12.x | Named analytic or tabulated closures through a query driver or Python module |
 | `m-aneos-1.0` | M-ANEOS 1.0.x | Semi-analytic total-material Helmholtz EOS from an operator-supplied parameter set |
+| `feos-16.7` | Frankfurt FEOS 16.7 | QEOS electron/ion thermodynamics and charge state from a declared material database |
 
 Select the advertised capability through the active API above. With classic
 `run_capability`, the first argv item is the workspace-relative Python program;
@@ -55,6 +56,28 @@ variables, units, and the query JSON contract. Read
 repairing a runtime; it is not a campaign procedure.
 
 ## Limitations
+
+### Frankfurt FEOS
+
+- This is the Frankfurt high-energy-density FEOS package, not the unrelated
+  Python/Rust fluid-thermodynamics package named `feos`.
+- The model combines Thomas–Fermi electrons, Cowan ions and a bonding correction.
+  `FEOS_Get_EOS_All` returns the corrected electron and ion contributions
+  separately. They can be evaluated at different temperatures; this is an
+  approximate model decomposition, not independent validation of a nonequilibrium state.
+- The adapter evaluates the homogeneous EOS with Maxwell construction and
+  soft-sphere replacement disabled. Do not label a subcritical expanded state
+  as an equilibrium mixture. The upstream manual says the split quantities
+  become physically meaningless inside a Maxwell two-phase mixture.
+- The public source archive does not contain every material named in the paper.
+  Supply and seal the actual material database; reference density, temperature
+  and bulk modulus are model inputs, not predictions. Heat capacities and other
+  derivatives require numerical assessment. Component energies use reference offsets.
+- Thomas–Fermi ionization has no atomic shell structure and is unreliable for
+  near-neutral dilute gases. The nonrelativistic model needs an explicit domain
+  assessment at high electron temperatures. EOS evaluation supplies no opacity.
+- Read [the FEOS interface](references/feos.md) for required workspace files,
+  units, single-state and batch queries, and upstream error handling.
 
 ### atoMEC
 
@@ -130,6 +153,7 @@ Official resources:
 - atoMEC: <https://github.com/atomec-project/atoMEC>
 - Singularity-EOS: <https://github.com/lanl/singularity-eos>
 - M-ANEOS: <https://github.com/isale-code/M-ANEOS>
+- Frankfurt FEOS: <https://data.mendeley.com/datasets/6vjsv6v48p/1>
 
 ## Boundaries
 

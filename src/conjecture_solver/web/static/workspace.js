@@ -1140,6 +1140,7 @@ const toolLabels = {
   "atomec": ["atoMEC", "Atomic physics", "AT", "Materials & radiation"],
   "singularity-eos": ["Singularity-EOS", "Equation of state", "ES", "Materials & radiation"],
   "m-aneos": ["M-ANEOS", "Equation of state", "ES", "Materials & radiation"],
+  "feos": ["Frankfurt FEOS", "Electron/ion equation of state", "ES", "Materials & radiation"],
   "optab": ["Optab", "Opacity tables", "OP", "Materials & radiation"],
 };
 function catalogTools() {

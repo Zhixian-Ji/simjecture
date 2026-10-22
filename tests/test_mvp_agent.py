@@ -5714,6 +5714,7 @@ def test_builtin_eos_skill_states_model_limits_without_campaign_science() -> Non
         "atomec-1.4.0",
         "singularity-eos-1.12.1",
         "m-aneos-1.0",
+        "feos-16.7",
     ]
 
 

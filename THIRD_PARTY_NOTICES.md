@@ -26,11 +26,18 @@ binaries outside this source distribution. Simjecture's `flash-mhd` skill and
 capability metadata do not relicense FLASH.
 
 Optional equation-of-state and opacity packages (atoMEC, Singularity-EOS,
-M-ANEOS, and Optab) are obtained under their upstream licenses. The
+M-ANEOS, Frankfurt FEOS, and Optab) are obtained under their upstream licenses. The
 operator-triggered installer may clone and build pinned revisions into a
 Git-ignored runtime; this repository still does not relicense those packages or
 commit their source, binaries, or atomic databases. Consult each upstream
 distribution for its license and required notices.
+
+Frankfurt FEOS 16.7 is GPL-3.0-or-later, available from the
+[author-published source archive](https://data.mendeley.com/datasets/6vjsv6v48p/1).
+Its source, interpolation data, material database and license remain in the
+external runtime. The installer links the query adapter against that library;
+the resulting executable is subject to FEOS's GPL terms. No upstream FEOS
+source or generated material tables are vendored in this repository.
 
 Model providers, literature services, and externally supplied guided
 commissioning packages are services or inputs rather than sublicensed parts of

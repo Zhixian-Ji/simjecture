@@ -51,6 +51,7 @@ CATALOGUE = [
     ("atomec", "atoMEC", "Average-atom equation of state", "install"),
     ("singularity-eos", "Singularity-EOS", "Equation-of-state library", "install"),
     ("m-aneos", "M-ANEOS", "Multiphase equation of state", "install"),
+    ("feos", "Frankfurt FEOS", "Electron/ion QEOS thermodynamics; no opacity", "install"),
     ("optab", "Optab", "Opacity tables", "install"),
 ]
 

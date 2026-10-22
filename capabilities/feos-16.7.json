@@ -1,0 +1,36 @@
+{
+  "environment": {
+    "FEOS_QUERY": "/opt/acs-capabilities/feos-16.7/bin/feos-query",
+    "FEOS_DATA": "/opt/acs-capabilities/feos-16.7/share/feos",
+    "OMP_NUM_THREADS": "1",
+    "OPENBLAS_NUM_THREADS": "1",
+    "PYTHONDONTWRITEBYTECODE": "1"
+  },
+  "executable": "bin/python",
+  "identity_files": [
+    "bin/feos-query",
+    "share/build-record.json",
+    "share/feos/FEOS_Material-DB.dat",
+    "share/feos/FEOS_TF-Table_1197.dat"
+  ],
+  "manifest": {
+    "description": "Frankfurt FEOS 16.7 QEOS thermodynamics with explicit electron/ion contributions; no opacity",
+    "executable_kind": "python-feos-query",
+    "name": "feos-16.7",
+    "preflight_checks": [
+      "checks.completed",
+      "checks.executable_present",
+      "checks.data_present",
+      "checks.process_completed",
+      "checks.return_code_zero",
+      "checks.result_finite",
+      "checks.component_sums"
+    ],
+    "preflight_resource": "examples/feos_runtime_smoke.py",
+    "preflight_result": "feos_capability_smoke.json",
+    "schema_version": "0.1.0",
+    "skill": "eos",
+    "version": "16.7"
+  },
+  "runtime_root": "../.runtime/feos-16.7"
+}

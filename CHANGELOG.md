@@ -4,6 +4,12 @@ This project follows semantic versioning. Dates use ISO 8601.
 
 ## Unreleased
 
+- Add the checksummed Frankfurt FEOS 16.7 installer, runtime doctor and research
+  tool catalogue entry. Expose homogeneous electron/ion QEOS contributions through
+  single-state and batch queries, preserve runtime/material identities, and turn
+  upstream zero-status error exits into failures. Document temperature/entropy
+  units, empirical material inputs, phase limits and the absence of opacity.
+
 ## 0.6.3 — 2026-10-20
 
 ### Hosted research

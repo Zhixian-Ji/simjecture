@@ -32,6 +32,7 @@ FLASH_MHD_CAPABILITY = "flash-island-coalescence-resistive-mhd-4.8"
 ATOMEC_CAPABILITY = "atomec-1.4.0"
 SINGULARITY_EOS_CAPABILITY = "singularity-eos-1.12.1"
 M_ANEOS_CAPABILITY = "m-aneos-1.0"
+FEOS_CAPABILITY = "feos-16.7"
 OPTAB_CAPABILITY = "optab-1.3.1"
 ITER_PACK_CAPABILITY = "iter-pack-1.0"
 WARP_LBM_CAPABILITY = "warp-lbm-cylinder-1.0"
@@ -52,6 +53,7 @@ _CAPABILITY_CONFIGS = {
     ATOMEC_CAPABILITY: "atomec-1.4.0.json",
     SINGULARITY_EOS_CAPABILITY: "singularity-eos-1.12.1.json",
     M_ANEOS_CAPABILITY: "m-aneos-1.0.json",
+    FEOS_CAPABILITY: "feos-16.7.json",
     OPTAB_CAPABILITY: "optab-1.3.1.json",
 }
 _CORE_DISTRIBUTIONS = (
@@ -96,6 +98,7 @@ class DeploymentProfile(StrEnum):
     ATOMEC = "atomec"
     SINGULARITY_EOS = "singularity-eos"
     M_ANEOS = "m-aneos"
+    FEOS = "feos"
     OPTAB = "optab"
 
 
@@ -108,9 +111,13 @@ _PROFILE_BY_CAPABILITY = {
     ATOMEC_CAPABILITY: DeploymentProfile.ATOMEC,
     SINGULARITY_EOS_CAPABILITY: DeploymentProfile.SINGULARITY_EOS,
     M_ANEOS_CAPABILITY: DeploymentProfile.M_ANEOS,
+    FEOS_CAPABILITY: DeploymentProfile.FEOS,
     OPTAB_CAPABILITY: DeploymentProfile.OPTAB,
 }
 _MISSING_RUNTIME_REMEDY = {
+    FEOS_CAPABILITY: (
+        "Run `simjecture install feos` to build the checksummed Frankfurt FEOS source."
+    ),
     ITER_PACK_CAPABILITY: "Run `simjecture install iter-pack` for diagnostics and IMAS support.",
     FLASH_MHD_CAPABILITY: (
         "Obtain FLASH from the official FLASH Center under its license, "
@@ -139,6 +146,7 @@ _MISSING_RUNTIME_REMEDY = {
     ),
 }
 _PREFLIGHT_REMEDY = {
+    FEOS_CAPABILITY: "Inspect the FEOS build record and rerun `simjecture install feos --repair`.",
     ITER_PACK_CAPABILITY: "Inspect the report; run `simjecture install iter-pack --repair`.",
     WARPX_CPU_CAPABILITY: (
         "Inspect the runtime and rerun the CPU profile installer with --repair."
@@ -177,6 +185,14 @@ class _BootstrapSpec:
 
 
 _BOOTSTRAP_SPECS = {
+    DeploymentProfile.FEOS: _BootstrapSpec(
+        capability=FEOS_CAPABILITY,
+        script="skills/eos/scripts/bootstrap_feos.sh",
+        managed_marker="share/build-record.json",
+        pinned_revision="01c2e0d9e3d5c787418405bf9dd3bc5beec28566d4bdb7c53cffbabf756b5eb4",
+        source_label="Frankfurt FEOS 16.7",
+        verify_revision=False,
+    ),
     DeploymentProfile.WARP_LBM: _BootstrapSpec(
         capability=WARP_LBM_CAPABILITY,
         script="skills/warp-lbm/scripts/bootstrap.sh",

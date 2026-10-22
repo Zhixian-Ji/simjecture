@@ -27,6 +27,9 @@ The capability smokes are interface checks, not physical commissioning:
   `singularity_eos` Python module.
 - `m-aneos-1.0` uses `MANEOS_QUERY` and copies `MANEOS_PREFLIGHT_INPUT` to
   `ANEOS.INPUT` in the workspace.
+- `feos-16.7` uses `FEOS_QUERY` and `FEOS_DATA`. Read
+  [the FEOS interface](feos.md) for workspace databases, component outputs,
+  eV-based entropy units and homogeneous-state limitations.
 
 ## Query JSON contract
 
