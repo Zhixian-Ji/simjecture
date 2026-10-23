@@ -953,7 +953,8 @@ def test_install_progress_failure_and_agent_recovery(tmp_path, monkeypatch, widt
         installed=False, state="working", readiness="unchecked",
         description="CHERAB / Raysect and IMAS", report=dict(error="Previous attempt failure"),
         log="Creating isolated ITER diagnostics environment…\nDownloading packages",
-        operation=dict(action="install", elapsed_seconds=123, log_path="/fixture/iter/install.log"),
+        operation=dict(action="install", running=True, stage="install", elapsed_seconds=123,
+                       activity="Downloading packages", log_path="/fixture/iter/install.log"),
     )
     monkeypatch.setattr(app.workspace, "catalogue", lambda: [tool])
     installs, messages = [], []
@@ -974,22 +975,39 @@ def test_install_progress_failure_and_agent_recovery(tmp_path, monkeypatch, widt
                 page.get_by_role("button", name="Expand left sidebar", exact=True).click()
             page.get_by_role("button", name="Research tools", exact=True).click()
             card = page.locator('[data-tool="iter-pack"]')
+            # Running setup moves to the top and shows its stage, timer and latest output.
+            active = page.locator("#active-tool-grid [data-tool='iter-pack']")
+            playwright.expect(active).to_be_visible()
             playwright.expect(card.get_by_text("Installing…", exact=True)).to_be_visible()
-            assert card.locator("progress").get_attribute("value") is None
-            playwright.expect(card.locator(".tool-progress")).to_contain_text("2m 3s elapsed")
+            bar = card.get_by_role("progressbar")
+            assert bar.get_attribute("aria-valuenow") is None  # no invented percentage
+            playwright.expect(card.locator(".tool-run")).to_contain_text("Step 2 of 3")
+            playwright.expect(card.locator(".tool-run-time")).to_contain_text("2m 0")
+            activity = card.locator(".tool-run-activity")
+            playwright.expect(activity).to_contain_text("Downloading packages")
+            badge = page.locator('.nav-item[data-view="tools"] .nav-activity')
+            playwright.expect(badge).to_have_text("1")
             card.click()
             dialog = page.locator("#tool-details-dialog")
             playwright.expect(dialog.get_by_role("progressbar")).to_be_visible()
+            playwright.expect(dialog.locator(".tool-steps li.active")).to_contain_text("Install")
+            stop = dialog.get_by_role("button", name="Stop setup")
+            playwright.expect(stop).to_be_enabled()
             playwright.expect(dialog.locator(".tool-failure")).to_have_count(0)
-            playwright.expect(dialog.get_by_text(
-                "Downloading packages", exact=False
-            )).to_be_visible()
+            output = dialog.locator(".tool-console-log")
+            playwright.expect(output).to_contain_text("Downloading packages")
             page.screenshot(path=str(screenshots / f"install-progress-{width}.png"))
-            tool["operation"]["elapsed_seconds"] = 183
+            tool["operation"].update(elapsed_seconds=183, stage="verify", estimate_seconds=600)
             tool["log"] += "\nBuilding extensions"
             page.evaluate("refreshTools()")
-            playwright.expect(dialog.locator(".tool-progress")).to_contain_text("3m 3s elapsed")
-            playwright.expect(card.locator(".tool-progress")).to_contain_text("3m 3s elapsed")
+            playwright.expect(dialog.locator(".tool-run-time")).to_contain_text("3m 0")
+            playwright.expect(dialog.locator(".tool-steps li.done")).to_have_count(2)
+            progress = dialog.get_by_role("progressbar")
+            playwright.expect(progress).to_have_attribute("aria-valuenow", "31")
+            meta = dialog.locator(".tool-run-meta")
+            playwright.expect(meta).to_contain_text("usually about 10 min")
+            output = dialog.locator(".tool-console-log")
+            playwright.expect(output).to_contain_text("Building extensions")
             assert dialog.locator(
                 '[data-key="installation-iter-pack"]'
             ).get_attribute("open") is not None
@@ -1004,7 +1022,8 @@ def test_install_progress_failure_and_agent_recovery(tmp_path, monkeypatch, widt
             ))
             tool["log"] += "\nCompiler prerequisite failed"
             page.evaluate("refreshTools()")
-            playwright.expect(dialog.locator("progress")).to_have_count(0)
+            playwright.expect(dialog.get_by_role("progressbar")).to_have_count(0)
+            playwright.expect(badge).to_have_count(0)
             playwright.expect(card.get_by_text("Needs attention", exact=True)).to_be_visible()
             playwright.expect(dialog.locator(".tool-failure")).to_be_visible()
             playwright.expect(dialog.locator(".tool-failure")).to_contain_text("C compiler")
@@ -1019,6 +1038,7 @@ def test_install_progress_failure_and_agent_recovery(tmp_path, monkeypatch, widt
             )).to_be_disabled()
             page.evaluate("state.readonly=false;state.toolDetailsRevision='';renderToolDetails(state.tools[0])")
             dialog.get_by_role("button", name="Retry installation").click()
+            page.wait_for_function("() => !state.toolStarting.size")
             assert installs == [dict(name="iter-pack", action="install")]
             diagnose.click()
             playwright.expect(page.locator("#project-title")).to_have_text(
@@ -1026,7 +1046,7 @@ def test_install_progress_failure_and_agent_recovery(tmp_path, monkeypatch, widt
             )
             playwright.expect(page.locator("#chat-input")).not_to_have_value("")
             draft = page.locator("#chat-input").input_value()
-            assert "iter-pack skill and references/diagnostics.md" in draft
+            assert "iter-pack skill (SKILL.md, references/diagnostics.md)" in draft
             assert "C compiler" in draft and "Compiler prerequisite failed" in draft
             assert "/fixture/iter/install.log" in draft
             assert "local-cuda-deployment" not in draft
@@ -1081,8 +1101,9 @@ def test_source_tools_open_agent_assisted_installation_conversations(tmp_path, m
                     re.compile(re.escape(guide))
                 )
                 draft = page.locator("#chat-input").input_value()
-                assert guide in draft and "read_skill" in draft
-                assert "persistent named folders" in draft
+                assert guide in draft and "persistent named folders" in draft
+                # Each tool receives only its own guidance.
+                assert "island" not in draft.lower() and "read_skill" not in draft
                 assert page.locator("#interactive-panel").is_visible()
                 assert page.locator("#source-dialog").count() == 0
             assert not installs
