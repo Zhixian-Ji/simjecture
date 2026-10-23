@@ -4,6 +4,11 @@ This project follows semantic versioning. Dates use ISO 8601.
 
 ## Unreleased
 
+- Show failed and interrupted research-tool setup as needing attention, with
+  visible diagnostics and an agent-assisted repair conversation containing the
+  saved error and recent output. Show live setup output, an activity bar and
+  elapsed time during installation/checks; retain earlier attempt logs on retry.
+
 - Keep the workspace tabs visible and give simulation/command history and the
   selected run independent scrolling, including on narrow screens. Preserve
   reading positions during live refreshes. Use the preprint's Figure 1 for the

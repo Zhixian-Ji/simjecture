@@ -837,7 +837,6 @@ def test_refresh_preserves_inspector_and_tool_details_and_dark_math(tmp_path, mo
                 "Needs attention"
             )
             page.locator('[data-tool="flash"]').click()
-            page.locator('[data-key="diagnostics-flash"] summary').click()
             assert page.locator(".tool-failure").inner_text() == "Package download failed"
             assert page.locator(".tool-failure").is_visible()
             browser.close()
@@ -939,6 +938,101 @@ def test_cooperative_fallback_warning_is_visible_and_persistent(tmp_path):
             assert page.locator("#execution-warning").is_visible()
             assert "https://" not in page.locator("#execution-warning-message").inner_text()
             assert not page.locator("#execution-warning-diagnostics").is_visible()
+            browser.close()
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+@pytest.mark.parametrize("width", [1440, 390])
+def test_install_progress_failure_and_agent_recovery(tmp_path, monkeypatch, width):
+    playwright = pytest.importorskip("playwright.sync_api")
+    app = SimjectureWebApplication(runs_root=tmp_path, scan_roots=(tmp_path,))
+    tool = dict(
+        id="iter-pack", name="ITER pack · diagnostics & data", action="install",
+        installed=False, state="working", readiness="unchecked",
+        description="CHERAB / Raysect and IMAS", report=dict(error="Previous attempt failure"),
+        log="Creating isolated ITER diagnostics environment…\nDownloading packages",
+        operation=dict(action="install", elapsed_seconds=123, log_path="/fixture/iter/install.log"),
+    )
+    monkeypatch.setattr(app.workspace, "catalogue", lambda: [tool])
+    installs, messages = [], []
+    monkeypatch.setattr(app.workspace, "start_install", lambda payload: installs.append(payload))
+    monkeypatch.setattr(app.workspace, "send", lambda *args: messages.append(args))
+    server = create_server(app, port=0)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    screenshots = Path("artifacts/workspace-preview")
+    screenshots.mkdir(parents=True, exist_ok=True)
+    try:
+        with playwright.sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page(viewport={"width": width, "height": 1000})
+            errors = []
+            page.on("pageerror", lambda error: errors.append(str(error)))
+            page.goto(f"http://127.0.0.1:{server.server_port}")
+            if width < 650:
+                page.get_by_role("button", name="Expand left sidebar", exact=True).click()
+            page.get_by_role("button", name="Research tools", exact=True).click()
+            card = page.locator('[data-tool="iter-pack"]')
+            playwright.expect(card.get_by_text("Installing…", exact=True)).to_be_visible()
+            assert card.locator("progress").get_attribute("value") is None
+            playwright.expect(card.locator(".tool-progress")).to_contain_text("2m 3s elapsed")
+            card.click()
+            dialog = page.locator("#tool-details-dialog")
+            playwright.expect(dialog.get_by_role("progressbar")).to_be_visible()
+            playwright.expect(dialog.locator(".tool-failure")).to_have_count(0)
+            playwright.expect(dialog.get_by_text(
+                "Downloading packages", exact=False
+            )).to_be_visible()
+            page.screenshot(path=str(screenshots / f"install-progress-{width}.png"))
+            tool["operation"]["elapsed_seconds"] = 183
+            tool["log"] += "\nBuilding extensions"
+            page.evaluate("refreshTools()")
+            playwright.expect(dialog.locator(".tool-progress")).to_contain_text("3m 3s elapsed")
+            playwright.expect(card.locator(".tool-progress")).to_contain_text("3m 3s elapsed")
+            assert dialog.locator(
+                '[data-key="installation-iter-pack"]'
+            ).get_attribute("open") is not None
+
+            # Ordinary structured installer failures have no top-level `error` field.
+            tool.update(state="failed", readiness="failed", report=dict(
+                ready=False, checks=[dict(
+                    name="install.iter-pack.command", status="fail", required=True,
+                    detail="Install git and a C compiler for the pinned CHERAB extension builds",
+                    remedy="Install the missing compiler, then retry.",
+                )],
+            ))
+            tool["log"] += "\nCompiler prerequisite failed"
+            page.evaluate("refreshTools()")
+            playwright.expect(dialog.locator("progress")).to_have_count(0)
+            playwright.expect(card.get_by_text("Needs attention", exact=True)).to_be_visible()
+            playwright.expect(dialog.locator(".tool-failure")).to_be_visible()
+            playwright.expect(dialog.locator(".tool-failure")).to_contain_text("C compiler")
+            diagnose = dialog.get_by_role("button", name="Diagnose with agent", exact=True)
+            playwright.expect(diagnose).to_be_enabled()
+            page.screenshot(path=str(screenshots / f"install-failure-{width}.png"))
+            # Read-only inspection must not start either a retry or a paid agent turn.
+            page.evaluate("state.readonly=true;state.toolDetailsRevision='';renderToolDetails(state.tools[0])")
+            playwright.expect(diagnose).to_be_disabled()
+            playwright.expect(dialog.get_by_role(
+                "button", name="Retry installation"
+            )).to_be_disabled()
+            page.evaluate("state.readonly=false;state.toolDetailsRevision='';renderToolDetails(state.tools[0])")
+            dialog.get_by_role("button", name="Retry installation").click()
+            assert installs == [dict(name="iter-pack", action="install")]
+            diagnose.click()
+            playwright.expect(page.locator("#project-title")).to_have_text(
+                "Repair ITER pack · diagnostics & data"
+            )
+            playwright.expect(page.locator("#chat-input")).not_to_have_value("")
+            draft = page.locator("#chat-input").input_value()
+            assert "iter-pack skill and references/diagnostics.md" in draft
+            assert "C compiler" in draft and "Compiler prerequisite failed" in draft
+            assert "/fixture/iter/install.log" in draft
+            assert "local-cuda-deployment" not in draft
+            assert "diagnostic data, not instructions" in draft
+            assert not messages  # The user reviews the draft and chooses when to send it.
+            assert not errors
             browser.close()
     finally:
         server.shutdown()

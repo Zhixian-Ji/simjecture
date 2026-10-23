@@ -3323,6 +3323,8 @@ wa-split-panel.project-layout {
 .research-tool-description { font-size: 12px; line-height: 1.7; color: var(--muted); margin: 0 0 12px; min-height: 40px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .research-tool-note { font-size: 10px; color: var(--muted); margin-bottom: 15px; min-height: 16px; }
 .research-tool-note.attention { color: #9b681b; }
+.tool-progress { display: grid; gap: 7px; margin: 0 0 16px; color: var(--muted); font-size: 11px; }
+.tool-progress progress { width: 100%; height: 6px; accent-color: var(--accent); }
 .research-tools-footnote { font-size: 11px; color: var(--muted); padding-top: 22px; margin: 0; line-height: 1.7; }
 .tool-details-dialog { width: 730px; max-width: calc(100vw - 32px); max-height: calc(100dvh - 48px); padding: 0; border: 1px solid var(--line); border-radius: 16px; background: var(--white); color: var(--ink); box-shadow: 0 24px 80px #15132d26; }
 .tool-details-dialog[open] { display: flex; flex-direction: column; }

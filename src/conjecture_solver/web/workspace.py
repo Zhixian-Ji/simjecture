@@ -18,7 +18,7 @@ import time
 import tomllib
 import uuid
 from contextlib import contextmanager, suppress
-from datetime import date
+from datetime import date, datetime
 from functools import cached_property
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -1699,7 +1699,7 @@ class Workspace(MachineWorkspace, ProjectCollections):
         cards = []
         for name, label, description, action in CATALOGUE:
             saved = load(manager.runtime_root / "deployment" / f"{name}.json")
-            job = load(self.root / "tools" / name / "job.json")
+            operation = self.tool_operation(name)
             result = load(self.root / "tools" / name / "result.json")
             descriptor = next(manager.capability_root.glob(name + "-*.json"), None)
             if name == "warpx-cuda":
@@ -1744,6 +1744,14 @@ class Workspace(MachineWorkspace, ProjectCollections):
                 and latest.get("descriptor") != str(descriptor.resolve())
             ):
                 latest = {}
+            recovery_after = 0
+            if operation.get("interrupted"):
+                recovery_after = (self.root / "tools" / name / "job.json").stat().st_mtime
+                latest = dict(
+                    ready=False,
+                    error="Setup stopped before recording a result. Diagnose the saved output "
+                    "with an agent or retry the operation.",
+                )
             if descriptor and not latest.get("ready"):
                 # Agent-installed variants may be checked by their registered
                 # directory ID. Reuse that exact capability's readiness result.
@@ -1756,6 +1764,7 @@ class Workspace(MachineWorkspace, ProjectCollections):
                         and Path(report.get("descriptor", "")).resolve()
                         == descriptor.resolve().parent
                         and checked.stat().st_mtime >= descriptor.stat().st_mtime
+                        and checked.stat().st_mtime >= recovery_after
                     ):
                         latest = report
                         break
@@ -1774,7 +1783,7 @@ class Workspace(MachineWorkspace, ProjectCollections):
                     if latest and not latest.get("ready")
                     else "unchecked",
                     state="working"
-                    if alive(job.get("process"))
+                    if operation.get("running")
                     else "tested"
                     if latest.get("ready") and installed
                     else "installed"
@@ -1783,6 +1792,7 @@ class Workspace(MachineWorkspace, ProjectCollections):
                     if latest and not latest.get("ready")
                     else "available",
                     report=latest,
+                    operation=operation,
                     path=str(descriptor) if descriptor and registered else None,
                     log=self.tool_log(name),
                 )
@@ -1808,8 +1818,12 @@ class Workspace(MachineWorkspace, ProjectCollections):
                     / config.get("executable", "missing")
                 )
                 installed &= executable.is_file() and os.access(executable, os.X_OK)
-            job = load(self.root / "tools" / tool["id"] / "job.json")
+            operation = self.tool_operation(tool["id"])
             result = load(self.root / "tools" / tool["id"] / "result.json")
+            if operation.get("interrupted"):
+                result = dict(
+                    ready=False, error="Readiness check stopped before recording a result."
+                )
             for descriptor in descriptors:
                 config = load(descriptor)
                 runtime = descriptor.resolve().parent / config.get("runtime_root", "missing")
@@ -1820,7 +1834,7 @@ class Workspace(MachineWorkspace, ProjectCollections):
                 tool
                 | {
                     "state": "working"
-                    if alive(job.get("process"))
+                    if operation.get("running")
                     else "tested"
                     if result.get("ready") and installed
                     else "registered",
@@ -1832,10 +1846,31 @@ class Workspace(MachineWorkspace, ProjectCollections):
                     if result
                     else "unchecked",
                     "report": result,
+                    "operation": operation,
                     "log": self.tool_log(tool["id"]),
                 }
             )
         return cards
+
+    def tool_operation(self, name):
+        directory = self.root / "tools" / name
+        job = load(directory / "job.json")
+        if not job:
+            return {}
+        process = job.get("process") or {}
+        running = alive(process)
+        operation = dict(
+            action=job.get("action", "install"),
+            running=running,
+            started_at=process.get("launched_at"),
+            interrupted=not running and not (directory / "result.json").is_file(),
+            log_path=str(directory / "install.log"),
+        )
+        if running and operation["started_at"]:
+            with suppress(ValueError, TypeError):
+                started = datetime.fromisoformat(operation["started_at"]).timestamp()
+                operation["elapsed_seconds"] = max(0, int(time.time() - started))
+        return operation
 
     def tool_log(self, name):
         if name not in {c[0] for c in CATALOGUE} and not re.fullmatch(r"custom-[0-9a-f]{12}", name):
@@ -1879,6 +1914,15 @@ class Workspace(MachineWorkspace, ProjectCollections):
             directory.mkdir(parents=True, exist_ok=True)
             if alive(load(directory / "job.json").get("process")):
                 raise ValueError("This tool is already being installed or checked")
+            previous = [
+                directory / filename for filename in ("job.json", "result.json", "install.log")
+            ]
+            if any(path.is_file() and path.stat().st_size for path in previous):
+                archive = directory / "attempts" / uuid.uuid4().hex
+                archive.mkdir(parents=True)
+                for path in previous:
+                    if path.is_file():
+                        shutil.copy2(path, archive / path.name)
             (directory / "result.json").unlink(missing_ok=True)
             (directory / "install.log").write_text("")
             command = [
