@@ -12,7 +12,9 @@ This project follows semantic versioning. Dates use ISO 8601.
   be stopped (process group terminated, output kept, not reported as a failure),
   are followed from every page with a sidebar badge, and announce completion.
   Failures list each failed check with its remedy. Add `tool-progress` and
-  `stop-install` workspace endpoints.
+  `stop-install` workspace endpoints. Keep detected, unregistered local builds
+  separate from managed-profile failures, whose diagnostics remain available
+  in the tool details.
 - Give each tool accurate agent-assisted setup instructions that name only its
   own skill files. Remove the FLASH island-coalescence caveat and the reference
   to `read_skill`, which CLI agents do not have.

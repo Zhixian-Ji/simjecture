@@ -1241,6 +1241,8 @@ function toolFailure(tool) {
     .map(check=>[check.detail,check.remedy].filter(Boolean).join(" ")).join("\n");
 }
 function toolNeedsDiagnosis(tool) {
+  // A managed-profile failure says nothing about unregistered local builds.
+  if(tool.installed && tool.registered === false)return false;
   return !toolRunning(tool) && !tool.included && !!(toolFailure(tool) || tool.readiness === "failed" || tool.state === "failed");
 }
 function toolStopped(tool) {
@@ -1526,6 +1528,12 @@ function renderToolDetails(tool,section=null) {
     variants.append(el("summary",`${tool.variants.length} ${hosted ? "starter preset" : "installed application"}${tool.variants.length === 1 ? "" : "s"}`));
     for(const variant of tool.variants){const item=el("div");item.append(el("strong",variant.label || variant.name || "Local build"),el("p",variant.description || ""));if(!hosted)item.append(el("code",variant.runtime || variant.path || ""));variants.append(item);}
     body.append(variants);
+  }
+  if(!hosted && tool.installed && tool.registered === false && toolFailure(tool)){
+    const diagnostics=el("details");diagnostics.dataset.key=`diagnostics-${tool.id}`;
+    diagnostics.open=opened.has(diagnostics.dataset.key);
+    diagnostics.append(el("summary","Managed profile · setup diagnostics"),el("pre",toolFailure(tool),"tool-failure"));
+    body.append(diagnostics);
   }
   if(!tool.included && (tool.log || Object.keys(tool.report || {}).length || running)){
     const output=toolConsole(tool,opened);body.append(output);
